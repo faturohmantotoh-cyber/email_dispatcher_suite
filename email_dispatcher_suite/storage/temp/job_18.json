@@ -1,0 +1,22 @@
+{
+    "subject": "TES AJA",
+    "cc": "totoh.faturohman@daihatsu.astra.co.id",
+    "body": "tes",
+    "items": [
+        {
+            "id": 82,
+            "to": "erni@alifmb.co.id;irni@alifmb.co.id",
+            "attachment": "D:\\email_attachement\\Alifindo 4100115640.pdf"
+        },
+        {
+            "id": 83,
+            "to": "imulawarman@mmm.com;lzainuddin@mmm.com;tpujiyanti@mmm.com",
+            "attachment": "D:\\email_attachement\\3M Indonesia 4100115631.pdf"
+        },
+        {
+            "id": 84,
+            "to": "sales_industry@andalan.co.id;vincent@andalan.co.id",
+            "attachment": "D:\\email_attachement\\Andalan 4100115649.pdf"
+        }
+    ]
+}

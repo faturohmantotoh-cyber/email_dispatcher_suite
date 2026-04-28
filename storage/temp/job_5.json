@@ -1,0 +1,22 @@
+{
+    "subject": "TES",
+    "cc": "totoh.faturohman@daihatsu.astra.co.id",
+    "body": "TESSS",
+    "items": [
+        {
+            "id": 11,
+            "to": "Aji.Prasetyo@Daihatsu.astra.co.id",
+            "attachment": "D:\\email PO\\Aji Dwi 4100119282_1.pdf"
+        },
+        {
+            "id": 12,
+            "to": "Totoh.Faturohman@Daihatsu.astra.co.id",
+            "attachment": "D:\\email PO\\Aji Dwi 4100119282_1.pdf"
+        },
+        {
+            "id": 13,
+            "to": "Yogie.Herdiansyah@Daihatsu.astra.co.id",
+            "attachment": "D:\\email PO\\Aji Dwi 4100119282_1.pdf"
+        }
+    ]
+}

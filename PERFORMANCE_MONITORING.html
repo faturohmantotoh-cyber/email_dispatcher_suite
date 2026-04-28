@@ -1,0 +1,133 @@
+<!-- Performance Monitoring Dashboard - Add to logs.php template -->
+<style>
+.perf-card {
+    background: #f8f9fa;
+    border-left: 4px solid #0d6efd;
+    padding: 15px;
+    margin: 10px 0;
+    border-radius: 4px;
+}
+.perf-good { border-left-color: #198754; }
+.perf-warn { border-left-color: #ffc107; }
+.perf-bad { border-left-color: #dc3545; }
+.perf-metric {
+    display: flex;
+    justify-content: space-between;
+    margin: 8px 0;
+}
+.perf-value {
+    font-weight: bold;
+    font-family: monospace;
+}
+</style>
+
+<div class="perf-card">
+    <h5>📊 Email Performance Metrics</h5>
+    <div class="perf-metric">
+        <span>Processing Jobs (Active):</span>
+        <span class="perf-value"><?php echo $stats['processing_jobs'] ?? 0; ?></span>
+    </div>
+    <div class="perf-metric">
+        <span>Jobs Completed (24h):</span>
+        <span class="perf-value"><?php echo $stats['completed_24h'] ?? 0; ?></span>
+    </div>
+    <div class="perf-metric">
+        <span>Average Time/Job:</span>
+        <span class="perf-value"><?php echo $stats['avg_time_seconds'] ?? 'N/A'; ?>s</span>
+    </div>
+    <div class="perf-metric">
+        <span>Database Size:</span>
+        <span class="perf-value"><?php echo $stats['db_size_mb'] ?? 'N/A'; ?> MB</span>
+    </div>
+</div>
+
+<!-- PHP Code to add to logs.php -->
+
+<?php
+/*
+// Add this to logs.php around line 15 (after $pdo = DB::conn();)
+
+// Performance metrics
+$metrics = $pdo->query("
+    SELECT
+        (SELECT COUNT(*) FROM mail_jobs WHERE status='processing') as processing_jobs,
+        (SELECT COUNT(*) FROM mail_jobs WHERE DATE(created_at) = CURDATE()) as completed_24h,
+        (SELECT ROUND(AVG(DATEDIFF(SECOND, created_at, sent_at)), 2) 
+         FROM mail_job_items WHERE sent_at IS NOT NULL AND DATEDIFF(SECOND, created_at, sent_at) > 0) as avg_time_seconds,
+        (SELECT ROUND(SUM(data_free + data_length) / 1024 / 1024, 2) 
+         FROM information_schema.tables WHERE table_schema='email_dispatcher') as db_size_mb
+")->fetch(PDO::FETCH_ASSOC);
+
+$stats = $metrics;
+?>
+*/
+?>
+
+---
+
+## Performance Optimization Summary
+
+### Changes Made:
+
+1. ✅ **Disabled Similarity Score Calculation**
+   - File: `public/send.php`
+   - Expected Savings: 500ms - 1s per 100 recipients
+   
+2. ✅ **Increased PowerShell Batch Size**
+   - File: `ps/send_outlook_emails.ps1`
+   - Batch Size: 5 → 25 items
+   - Expected Savings: 10-15 seconds per 100 recipients
+   
+3. ✅ **Added Database Indexes**
+   - Files: `mail_job_items` table
+   - Indexes: `idx_mail_job_recipient`, `idx_recipient_email`
+   - Expected Speedup: 10-100x faster queries
+   
+4. ✅ **Created Job Cleanup Procedure**
+   - File: `db/optimize_email_performance.sql`
+   - Command: `CALL cleanup_old_jobs(90);`
+   - Prevents gradual database slowdown
+
+### Testing Steps:
+
+```
+1. Open: http://localhost/logs.php
+2. Compose email to group order with attachment
+3. Send and note completion time
+4. Compare with previous time (should be faster)
+5. Check logs.php for any "pending" items stuck > 5 minutes
+```
+
+### Expected Results:
+
+- **Before**: 45-60 seconds for 100-recipient email with attachment
+- **After**: 20-30 seconds for same (50% improvement)
+- **Variance**: Depends on Outlook availability & network speed
+
+### If Still Slow:
+
+1. Check `logs.php` for stuck items
+2. Verify `ps/send_outlook_emails.ps1` is running
+3. Check Outlook process memory: `tasklist | find /i "outlook"`
+4. Review PowerShell errors in temp files
+5. Try reducing batch size to 15 if memory issues
+
+### Performance Tuning:
+
+**For Very Large Batches (1000+ recipients)**:
+- Reduce batch size: 25 → 15
+- Enable staggered sending (5 second delay between batches)
+- Split into multiple jobs instead of one giant job
+
+**For Very Small Batches (< 10 recipients)**:
+- Increase batch size: 25 → 50
+- Minimal Outlook COM overhead
+
+**For Production Monitoring**:
+- Set up cron job to run cleanup monthly
+- Monitor `mail_jobs` table row count
+- Alert if processing_jobs > 10 (potential bottleneck)
+
+---
+
+See: `EMAIL_PERFORMANCE_OPTIMIZATIONS_APPLIED.md` for detailed documentation

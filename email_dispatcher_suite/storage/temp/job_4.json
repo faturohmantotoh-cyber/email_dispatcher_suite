@@ -1,0 +1,22 @@
+{
+    "subject": "TES",
+    "cc": "totoh.faturohman@daihatsu.astra.co.id",
+    "body": "TES",
+    "items": [
+        {
+            "id": 8,
+            "to": "Aji.Prasetyo@Daihatsu.astra.co.id",
+            "attachment": ""
+        },
+        {
+            "id": 9,
+            "to": "Totoh.Faturohman@Daihatsu.astra.co.id",
+            "attachment": ""
+        },
+        {
+            "id": 10,
+            "to": "Yogie.Herdiansyah@Daihatsu.astra.co.id",
+            "attachment": ""
+        }
+    ]
+}

@@ -1,0 +1,67 @@
+{
+    "subject": "tes",
+    "cc": "totoh.faturohman@daihatsu.astra.co.id",
+    "body": "tes",
+    "items": [
+        {
+            "id": 57,
+            "to": "Agoes.Komar@Daihatsu.astra.co.id",
+            "attachment": ""
+        },
+        {
+            "id": 58,
+            "to": "Aji.Prasetyo@Daihatsu.astra.co.id",
+            "attachment": ""
+        },
+        {
+            "id": 59,
+            "to": "erni@alifmb.co.id",
+            "attachment": "D:\\email_attachement\\Alifindo 4100115640.pdf"
+        },
+        {
+            "id": 60,
+            "to": "imulawarman@mmm.com",
+            "attachment": "D:\\email_attachement\\3M Indonesia 4100115631.pdf"
+        },
+        {
+            "id": 61,
+            "to": "irni@alifmb.co.id",
+            "attachment": "D:\\email_attachement\\Alifindo 4100115640.pdf"
+        },
+        {
+            "id": 62,
+            "to": "lzainuddin@mmm.com",
+            "attachment": "D:\\email_attachement\\3M Indonesia 4100115631.pdf"
+        },
+        {
+            "id": 63,
+            "to": "riyanto.irawan@Daihatsu.astra.co.id",
+            "attachment": ""
+        },
+        {
+            "id": 64,
+            "to": "sales_industry@andalan.co.id",
+            "attachment": "D:\\email_attachement\\Andalan 4100115649.pdf"
+        },
+        {
+            "id": 65,
+            "to": "Totoh.Faturohman@Daihatsu.astra.co.id",
+            "attachment": ""
+        },
+        {
+            "id": 66,
+            "to": "tpujiyanti@mmm.com",
+            "attachment": "D:\\email_attachement\\3M Indonesia 4100115631.pdf"
+        },
+        {
+            "id": 67,
+            "to": "vincent@andalan.co.id",
+            "attachment": "D:\\email_attachement\\Andalan 4100115649.pdf"
+        },
+        {
+            "id": 68,
+            "to": "Yogie.Herdiansyah@Daihatsu.astra.co.id",
+            "attachment": ""
+        }
+    ]
+}

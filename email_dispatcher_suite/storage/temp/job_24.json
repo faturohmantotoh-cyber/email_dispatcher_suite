@@ -1,0 +1,137 @@
+{
+    "subject": "DN ORDER CONSUMABLE 5 MARET 2026 (TEST EMAIL SYSTEM)",
+    "cc": "Email.Log@Daihatsu.astra.co.id;Admin.Lb3@Daihatsu.astra.co.id;Gita.Yoan@Daihatsu.astra.co.id;Totoh.Faturohman@Daihatsu.astra.co.id;Yari.Agiesta@Daihatsu.astra.co.id;Saefudin.Jaelani@Daihatsu.astra.co.id;Dedi.Surahman@Daihatsu.astra.co.id;Aji.Prasetyo@Daihatsu.astra.co.id;Ferry.Anindito@Daihatsu.astra.co.id;Meisya.Arianti@Daihatsu.astra.co.id",
+    "body": "<p><strong style=\"color: rgb(31, 73, 125);\">DEAR SUPPLIER<\/strong><\/p><p><em style=\"color: rgb(31, 73, 125);\">&nbsp;<\/em><em>&nbsp;<\/em><em style=\"color: rgb(31, 73, 125);\">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<\/em><\/p><p>Berikut kami informasikan Delivery Note ADM KAP.<\/p><p><span style=\"color: rgb(0, 0, 204);\">\"Terlampir di attachment sheet dengan Password\" : <\/span><strong style=\"color: rgb(0, 0, 204);\"><em><u>adm<\/u><\/em><\/strong><\/p><p>&nbsp;<\/p><p><strong style=\"color: rgb(31, 73, 125);\">Mohon perhatikan dan persiapkan sebelum pengiriman barang sebagai berikut :<\/strong><\/p><p><span style=\"color: rgb(31, 73, 125);\">&nbsp;<\/span><\/p><ol><li data-list=\"ordered\"><span class=\"ql-ui\" contenteditable=\"false\"><\/span><span style=\"color: rgb(31, 73, 125);\">Pastikan DN diprint dan dibawa beserta surat jalan supplier.<\/span><\/li><li data-list=\"ordered\"><span class=\"ql-ui\" contenteditable=\"false\"><\/span><span style=\"color: rgb(31, 73, 125);\">Pengiriman dapat menyesuaikan tanggal dan jam yang tertera pada DN ( Apabila ada perubahan mohon dikonfirmasikan terlebih dahulu ke team Warehose Consumable ).<\/span><\/li><li data-list=\"ordered\"><span class=\"ql-ui\" contenteditable=\"false\"><\/span><span style=\"color: rgb(31, 73, 125);\">Pastikan pengiriman sudah terdaftar dan sudah mengisi Form Deklarasi Kesehatan yang sudah dikonfirm\/disetujui management ADM.<\/span><\/li><\/ol><p><span style=\"color: rgb(31, 73, 125);\">&nbsp;<\/span><\/p><p><strong style=\"background-color: lime; color: red;\">PIC PO &amp; DN<\/strong><\/p><ol><li data-list=\"ordered\"><span class=\"ql-ui\" contenteditable=\"false\"><\/span><strong>Isna Ariwibowo<\/strong><\/li><\/ol><p>( 081210000607&nbsp;\/ <u style=\"color: rgb(51, 102, 204);\"><a href=\"mailto:isna.ariwibowo@daihatsu.astra.co.id\" rel=\"noopener noreferrer\" target=\"_blank\">isna.ariwibowo@daihatsu.astra.co.id<\/a><\/u>&nbsp;)<\/p><ol><li data-list=\"ordered\"><span class=\"ql-ui\" contenteditable=\"false\"><\/span><strong>Edi murtopo<\/strong><\/li><\/ol><p>( 081380142645 \/ <u style=\"color: rgb(5, 99, 193);\"><a href=\"mailto:edi.murtopo@daihatsu.astra.co.id\" rel=\"noopener noreferrer\" target=\"_blank\">edi.murtopo@daihatsu.astra.co.id<\/a><\/u>&nbsp;)<\/p><ol><li data-list=\"ordered\"><span class=\"ql-ui\" contenteditable=\"false\"><\/span><strong>AJI<\/strong><\/li><\/ol><p>( 081904127762<span style=\"color: rgb(31, 73, 125);\"> <\/span>&nbsp;\/ <u style=\"color: rgb(5, 99, 193);\"><a href=\"mailto:aji.prasetyo@daihatsu.astra.co.id\" rel=\"noopener noreferrer\" target=\"_blank\">aji.prasetyo@daihatsu.astra.co.id<\/a><\/u>&nbsp;)<\/p><p><span style=\"color: rgb(31, 73, 125);\">&nbsp;<\/span><\/p><p><strong style=\"background-color: yellow; color: red;\">PIC Warehouse ( Receiving )<\/strong><\/p><ol><li data-list=\"ordered\"><span class=\"ql-ui\" contenteditable=\"false\"><\/span><strong>Zarfain<\/strong><\/li><\/ol><p>( 089635825921 )<\/p><ol><li data-list=\"ordered\"><span class=\"ql-ui\" contenteditable=\"false\"><\/span><strong>Yari<\/strong><\/li><\/ol><p><strong>(082233556370)<\/strong><\/p><p><span style=\"color: rgb(31, 73, 125);\">&nbsp;<\/span><\/p><p>&nbsp;<\/p><p><strong>Regards<\/strong><\/p><p><strong>&nbsp;<\/strong><\/p><p><strong>EDI MURTOPO<\/strong><\/p><p><span style=\"color: red;\">Ordering Consummable &amp; Admin<\/span><\/p><p><span style=\"color: rgb(0, 176, 80);\">PLANNING CONTROL DEPT<\/span><\/p><p><strong>PT. Astra Daihatsu Motor – Karawang Assembly Plant (KAP)<\/strong><\/p><p>Jl. Surya Pratama Kav.1 no 47-57. Kawasan Industri Surya Cipta, Karawang Timur - Indonesia.<\/p><p>41361<\/p><p>No Hp 081380142645<\/p><p>Email : <u style=\"color: rgb(5, 99, 193);\"><a href=\"mailto:Edi.murtopo@daihatsu.astra.co.id\" rel=\"noopener noreferrer\" target=\"_blank\">Edi.murtopo@daihatsu.astra.co.id<\/a><\/u><\/p><p>&nbsp;<\/p>",
+    "items": [
+        {
+            "id": 99,
+            "to": "admin.marketing1@kpid.co.id",
+            "attachment": "D:\\email_attachment\\KANSAI.xlsx"
+        },
+        {
+            "id": 100,
+            "to": "budi@kpid.co.id",
+            "attachment": "D:\\email_attachment\\KANSAI.xlsx"
+        },
+        {
+            "id": 101,
+            "to": "customer.care@technopure.co.id",
+            "attachment": "D:\\email_attachment\\TECHNOPURE.xlsx"
+        },
+        {
+            "id": 102,
+            "to": "erni@alifmb.co.id",
+            "attachment": "D:\\email_attachment\\ALIFINDO MITRA.xlsx"
+        },
+        {
+            "id": 103,
+            "to": "ffaiz@mmm.com",
+            "attachment": "D:\\email_attachment\\3M.xlsx"
+        },
+        {
+            "id": 104,
+            "to": "gerry@kpid.co.id",
+            "attachment": "D:\\email_attachment\\KANSAI.xlsx"
+        },
+        {
+            "id": 105,
+            "to": "icsangaspar@mmm.com",
+            "attachment": "D:\\email_attachment\\3M.xlsx"
+        },
+        {
+            "id": 106,
+            "to": "imulawarman@mmm.com",
+            "attachment": "D:\\email_attachment\\3M.xlsx"
+        },
+        {
+            "id": 107,
+            "to": "irni@alifmb.co.id",
+            "attachment": "D:\\email_attachment\\ALIFINDO MITRA.xlsx"
+        },
+        {
+            "id": 108,
+            "to": "irwan.tjokro@technopure.co.id",
+            "attachment": "D:\\email_attachment\\TECHNOPURE.xlsx"
+        },
+        {
+            "id": 109,
+            "to": "khoerull@kpid.co.id",
+            "attachment": "D:\\email_attachment\\KANSAI.xlsx"
+        },
+        {
+            "id": 110,
+            "to": "lzainuddin@mmm.com",
+            "attachment": "D:\\email_attachment\\3M.xlsx"
+        },
+        {
+            "id": 111,
+            "to": "manualorders.gsc.ph@mmm.com",
+            "attachment": "D:\\email_attachment\\3M.xlsx"
+        },
+        {
+            "id": 112,
+            "to": "marketing@warnaprima.com",
+            "attachment": "D:\\email_attachment\\WARNA PRIMA.xlsx"
+        },
+        {
+            "id": 113,
+            "to": "mmonterozo@mmm.com",
+            "attachment": "D:\\email_attachment\\3M.xlsx"
+        },
+        {
+            "id": 114,
+            "to": "nemit@kpid.co.id",
+            "attachment": "D:\\email_attachment\\KANSAI.xlsx"
+        },
+        {
+            "id": 115,
+            "to": "Panca.kui@gmail.com",
+            "attachment": "D:\\email_attachment\\Panca Karya.xlsx"
+        },
+        {
+            "id": 116,
+            "to": "ria.destaria19@gmail.com",
+            "attachment": "D:\\email_attachment\\Panca Karya.xlsx"
+        },
+        {
+            "id": 117,
+            "to": "riasilvia07@yahoo.co.id",
+            "attachment": "D:\\email_attachment\\WARNA PRIMA.xlsx"
+        },
+        {
+            "id": 118,
+            "to": "rsungkowo@mmm.com",
+            "attachment": "D:\\email_attachment\\3M.xlsx"
+        },
+        {
+            "id": 119,
+            "to": "sales_industry@andalan.co.id",
+            "attachment": "D:\\email_attachment\\Andalan.xlsx"
+        },
+        {
+            "id": 120,
+            "to": "sales07@kpid.co.id",
+            "attachment": "D:\\email_attachment\\KANSAI.xlsx"
+        },
+        {
+            "id": 121,
+            "to": "sales01@kpid.co.id",
+            "attachment": "D:\\email_attachment\\KANSAI.xlsx"
+        },
+        {
+            "id": 122,
+            "to": "tpujiyanti@mmm.com",
+            "attachment": "D:\\email_attachment\\3M.xlsx"
+        },
+        {
+            "id": 123,
+            "to": "vincent@andalan.co.id",
+            "attachment": "D:\\email_attachment\\Andalan.xlsx"
+        },
+        {
+            "id": 124,
+            "to": "welly0307@gmail.com",
+            "attachment": "D:\\email_attachment\\WARNA PRIMA.xlsx"
+        }
+    ]
+}

@@ -1,0 +1,22 @@
+{
+    "subject": "tes",
+    "cc": "totoh.faturohman@daihatsu.astra.co.id",
+    "body": "<p><span class=\"ql-cursor\">﻿<\/span>Yth. Bapak\/Ibu,Terlampir dokumen...Terima kasih.<\/p>",
+    "items": [
+        {
+            "id": 91,
+            "to": "erni@alifmb.co.id;irni@alifmb.co.id",
+            "attachment": "D:\\email_attachment\\Alifindo 4100115640.pdf"
+        },
+        {
+            "id": 92,
+            "to": "ffaiz@mmm.com;icsangaspar@mmm.com;imulawarman@mmm.com",
+            "attachment": "D:\\email_attachment\\3M Indonesia 4100115631.pdf"
+        },
+        {
+            "id": 93,
+            "to": "sales_industry@andalan.co.id;vincent@andalan.co.id",
+            "attachment": "D:\\email_attachment\\Andalan 4100115649.pdf"
+        }
+    ]
+}
