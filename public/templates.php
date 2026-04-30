@@ -502,34 +502,62 @@ function editTemplate(templateId) {
 }
 
 // Delete template
-function deleteTemplate(templateId, name) {
-  Swal.fire({
+async function deleteTemplate(templateId, name) {
+  const result = await Swal.fire({
     title: 'Hapus Template?',
-    text: 'Apakah Anda yakin ingin menghapus template "' + name + '"?',
+    html: '<p style="color: #666; font-size: 14px;">Apakah Anda yakin ingin menghapus template <strong>"' + name + '"</strong>?</p><p style="color: #dc3545; font-weight: bold;"> Tindakan ini TIDAK DAPAT DIBATALKAN!</p>',
     icon: 'warning',
     showCancelButton: true,
     confirmButtonText: 'Ya, Hapus',
-    cancelButtonText: 'Batal'
-  }).then((result) => {
-    if (result.isConfirmed) {
+    confirmButtonColor: '#dc2626',
+    cancelButtonText: 'Batal',
+    cancelButtonColor: '#6b7280',
+    allowOutsideClick: false,
+    allowEscapeKey: false
+  });
+  
+  if (result.isConfirmed) {
+    // Prompt for admin password
+    const { value: password } = await Swal.fire({
+      title: 'Konfirmasi Password Administrator',
+      input: 'password',
+      inputLabel: 'Masukkan password Anda untuk melanjutkan:',
+      inputPlaceholder: 'Password',
+      inputAttributes: {
+        maxlength: 50,
+        autocapitalize: 'off',
+        autocorrect: 'off'
+      },
+      showCancelButton: true,
+      confirmButtonText: 'Konfirmasi',
+      confirmButtonColor: '#dc2626',
+      cancelButtonText: 'Batal',
+      cancelButtonColor: '#6b7280',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      inputValidator: (value) => {
+        if (!value) {
+          return 'Password wajib diisi!'
+        }
+      }
+    });
+    
+    if (password) {
       const formData = new FormData();
       formData.append('action', 'delete');
       formData.append('id', templateId);
       formData.append('csrf_token', '<?= e($csrf) ?>');
+      formData.append('admin_password', password);
       
       fetch('api_templates.php', {
         method: 'POST',
         body: formData
       })
-      .then(r => {
-        if (!r.ok) throw new Error('HTTP Error: ' + r.status);
-        return r.json();
-      })
+      .then(res => res.json())
       .then(data => {
-        if (data && data.ok) {
-          Swal.fire('Terhapus', 'Template berhasil dihapus', 'success').then(() => {
-            location.reload();
-          });
+        if (data.ok) {
+          Swal.fire('Terhapus', 'Template berhasil dihapus', 'success');
+          location.reload();
         } else {
           Swal.fire('Error', data?.error || 'Gagal menghapus template', 'error');
         }
@@ -539,7 +567,7 @@ function deleteTemplate(templateId, name) {
         Swal.fire('Error', 'Gagal menghapus: ' + err.message, 'error');
       });
     }
-  });
+  }
 }
 
 // Toggle template accordion

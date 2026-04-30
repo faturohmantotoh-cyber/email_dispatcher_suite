@@ -123,6 +123,296 @@ function escapeJSON($string) {
 }
 
 /**
+ * Send email via Microsoft Graph API
+ * @param string $to Recipient email address
+ * @param string $subject Email subject
+ * @param string $body Email body (HTML)
+ * @param array $attachments Array of attachment file paths
+ * @param string $cc CC recipients (semicolon separated)
+ * @return array ['success' => bool, 'message' => string]
+ */
+function send_email_via_graph($to, $subject, $body, $attachments = [], $cc = '') {
+    $accessToken = get_graph_access_token();
+    
+    if (!$accessToken) {
+        return ['success' => false, 'message' => 'Failed to get Graph API access token'];
+    }
+    
+    // Build recipients array
+    $recipients = [];
+    $toEmails = explode(';', $to);
+    foreach ($toEmails as $email) {
+        $email = trim($email);
+        if (!empty($email) && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $recipients[] = ['emailAddress' => ['address' => $email]];
+        }
+    }
+    
+    // Build CC recipients
+    $ccRecipients = [];
+    if (!empty($cc)) {
+        $ccEmails = explode(';', $cc);
+        foreach ($ccEmails as $email) {
+            $email = trim($email);
+            if (!empty($email) && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $ccRecipients[] = ['emailAddress' => ['address' => $email]];
+            }
+        }
+    }
+    
+    // Build attachments array
+    $graphAttachments = [];
+    foreach ($attachments as $filePath) {
+        if (!file_exists($filePath)) {
+            continue;
+        }
+        
+        $fileName = basename($filePath);
+        $fileContent = file_get_contents($filePath);
+        $mimeType = mime_content_type($filePath);
+        
+        $graphAttachments[] = [
+            '@odata.type' => '#microsoft.graph.fileAttachment',
+            'name' => $fileName,
+            'contentBytes' => base64_encode($fileContent),
+            'contentType' => $mimeType
+        ];
+    }
+    
+    // Build email message
+    $message = [
+        'subject' => $subject,
+        'body' => [
+            'contentType' => 'HTML',
+            'content' => $body
+        ],
+        'toRecipients' => $recipients
+    ];
+    
+    if (!empty($ccRecipients)) {
+        $message['ccRecipients'] = $ccRecipients;
+    }
+    
+    if (!empty($graphAttachments)) {
+        $message['attachments'] = $graphAttachments;
+    }
+    
+    // Send via Graph API
+    $url = "https://graph.microsoft.com/v1.0/users/" . urlencode(get_sender_account()) . "/sendMail";
+    
+    $data = ['message' => $message];
+    
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Authorization: Bearer ' . $accessToken,
+        'Content-Type: application/json'
+    ]);
+    
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+    
+    if ($error) {
+        error_log('Graph API send email failed: ' . $error);
+        return ['success' => false, 'message' => 'Curl error: ' . $error];
+    }
+    
+    if ($httpCode >= 200 && $httpCode < 300) {
+        return ['success' => true, 'message' => 'Email sent successfully via Graph API'];
+    }
+    
+    error_log('Graph API send email HTTP error: ' . $httpCode . ' Response: ' . $response);
+    return ['success' => false, 'message' => 'HTTP error: ' . $httpCode . ' - ' . $response];
+}
+
+/**
+ * Send email via SMTP
+ * @param string $to Recipient email address
+ * @param string $subject Email subject
+ * @param string $body Email body (HTML)
+ * @param array $attachments Array of attachment file paths
+ * @param string $cc CC recipients (semicolon separated)
+ * @return array ['success' => bool, 'message' => string]
+ */
+function send_email_via_smtp($to, $subject, $body, $attachments = [], $cc = '') {
+    // Check SMTP configuration
+    if (empty(SMTP_HOST) || empty(SMTP_USERNAME) || empty(SMTP_PASSWORD)) {
+        return ['success' => false, 'message' => 'SMTP configuration incomplete. Please configure SMTP settings.'];
+    }
+    
+    // Generate boundary for multipart
+    $boundary = md5(time());
+    
+    // Build headers
+    $fromEmail = SMTP_FROM_EMAIL ?: SMTP_USERNAME;
+    $fromName = SMTP_FROM_NAME ?: 'Email Dispatcher';
+    
+    $headers = [
+        'From: ' . $fromName . ' <' . $fromEmail . '>',
+        'MIME-Version: 1.0',
+        'Content-Type: multipart/mixed; boundary="' . $boundary . '"',
+        'X-Mailer: PHP/' . phpversion()
+    ];
+    
+    // Build body
+    $message = '';
+    
+    // HTML body part
+    $message .= '--' . $boundary . "\r\n";
+    $message .= 'Content-Type: text/html; charset=UTF-8' . "\r\n";
+    $message .= 'Content-Transfer-Encoding: base64' . "\r\n\r\n";
+    $message .= chunk_split(base64_encode($body)) . "\r\n";
+    
+    // Add attachments
+    foreach ($attachments as $filePath) {
+        if (!file_exists($filePath)) {
+            continue;
+        }
+        
+        $fileName = basename($filePath);
+        $fileContent = file_get_contents($filePath);
+        $mimeType = mime_content_type($filePath);
+        
+        $message .= '--' . $boundary . "\r\n";
+        $message .= 'Content-Type: ' . $mimeType . '; name="' . $fileName . '"' . "\r\n";
+        $message .= 'Content-Transfer-Encoding: base64' . "\r\n";
+        $message .= 'Content-Disposition: attachment; filename="' . $fileName . '"' . "\r\n\r\n";
+        $message .= chunk_split(base64_encode($fileContent)) . "\r\n";
+    }
+    
+    $message .= '--' . $boundary . '--';
+    
+    // Build recipient list
+    $toEmails = [];
+    $toEmailList = explode(';', $to);
+    foreach ($toEmailList as $email) {
+        $email = trim($email);
+        if (!empty($email) && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $toEmails[] = $email;
+        }
+    }
+    
+    $toHeader = implode(', ', $toEmails);
+    $headers[] = 'To: ' . $toHeader;
+    
+    // Add CC if provided
+    if (!empty($cc)) {
+        $ccEmails = [];
+        $ccEmailList = explode(';', $cc);
+        foreach ($ccEmailList as $email) {
+            $email = trim($email);
+            if (!empty($email) && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $ccEmails[] = $email;
+            }
+        }
+        if (!empty($ccEmails)) {
+            $headers[] = 'Cc: ' . implode(', ', $ccEmails);
+        }
+    }
+    
+    $headers[] = 'Subject: ' . $subject;
+    
+    // Send email
+    $headersStr = implode("\r\n", $headers);
+    
+    // Set encryption
+    $encryption = strtolower(SMTP_ENCRYPTION);
+    if ($encryption === 'ssl') {
+        $host = 'ssl://' . SMTP_HOST;
+    } else {
+        $host = SMTP_HOST;
+    }
+    
+    try {
+        $fp = fsockopen($host, SMTP_PORT, $errno, $errstr, 30);
+        
+        if (!$fp) {
+            return ['success' => false, 'message' => 'Failed to connect to SMTP server: ' . $errstr];
+        }
+        
+        // Read greeting
+        fgets($fp, 512);
+        
+        // Send EHLO
+        fwrite($fp, 'EHLO ' . gethostname() . "\r\n");
+        fgets($fp, 512);
+        fgets($fp, 512);
+        
+        // Start TLS if needed
+        if ($encryption === 'tls') {
+            fwrite($fp, 'STARTTLS' . "\r\n");
+            fgets($fp, 512);
+            
+            if (!stream_socket_enable_crypto($fp, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
+                fclose($fp);
+                return ['success' => false, 'message' => 'Failed to enable TLS encryption'];
+            }
+            
+            // Send EHLO again after TLS
+            fwrite($fp, 'EHLO ' . gethostname() . "\r\n");
+            fgets($fp, 512);
+            fgets($fp, 512);
+        }
+        
+        // Authenticate
+        fwrite($fp, 'AUTH LOGIN' . "\r\n");
+        fgets($fp, 512);
+        
+        fwrite($fp, base64_encode(SMTP_USERNAME) . "\r\n");
+        fgets($fp, 512);
+        
+        fwrite($fp, base64_encode(SMTP_PASSWORD) . "\r\n");
+        $response = fgets($fp, 512);
+        
+        if (strpos($response, '235') === false) {
+            fclose($fp);
+            return ['success' => false, 'message' => 'SMTP authentication failed'];
+        }
+        
+        // Send MAIL FROM
+        fwrite($fp, 'MAIL FROM: <' . $fromEmail . '>' . "\r\n");
+        fgets($fp, 512);
+        
+        // Send RCPT TO for each recipient
+        foreach ($toEmails as $email) {
+            fwrite($fp, 'RCPT TO: <' . $email . '>' . "\r\n");
+            fgets($fp, 512);
+        }
+        
+        // Send DATA
+        fwrite($fp, 'DATA' . "\r\n");
+        fgets($fp, 512);
+        
+        // Send headers and body
+        fwrite($fp, $headersStr . "\r\n\r\n");
+        fwrite($fp, $message . "\r\n");
+        fwrite($fp, '.' . "\r\n");
+        
+        $response = fgets($fp, 512);
+        
+        // Quit
+        fwrite($fp, 'QUIT' . "\r\n");
+        fclose($fp);
+        
+        if (strpos($response, '250') !== false) {
+            return ['success' => true, 'message' => 'Email sent successfully via SMTP'];
+        } else {
+            return ['success' => false, 'message' => 'SMTP send failed: ' . $response];
+        }
+        
+    } catch (Exception $e) {
+        error_log('SMTP send email failed: ' . $e->getMessage());
+        return ['success' => false, 'message' => 'SMTP error: ' . $e->getMessage()];
+    }
+}
+
+/**
  * Get safe pagination limit
  * @param int $requested Requested limit
  * @param int $max Maximum allowed limit
@@ -291,6 +581,67 @@ function require_csrf_token($redirectTo = null) {
 function csrf_field() {
     $token = htmlspecialchars(get_csrf_token(), ENT_QUOTES, 'UTF-8');
     return '<input type="hidden" name="csrf_token" value="' . $token . '">';
+}
+
+/**
+ * ============================================
+ * ADMIN PASSWORD VERIFICATION
+ * ============================================
+ */
+
+/**
+ * Verify admin password for sensitive operations
+ * @param string $password Password to verify
+ * @param PDO $pdo Database connection
+ * @return bool True if password is correct
+ */
+function verify_admin_password($password, $pdo) {
+    if (empty($password)) {
+        return false;
+    }
+    
+    // Get current user from session
+    if (!isset($_SESSION['user']['id'])) {
+        return false;
+    }
+    
+    $userId = $_SESSION['user']['id'];
+    
+    try {
+        $stmt = $pdo->prepare("SELECT password FROM users WHERE id = ?");
+        $stmt->execute([$userId]);
+        $user = $stmt->fetch();
+        
+        if (!$user) {
+            return false;
+        }
+        
+        // Verify password using password_verify
+        return password_verify($password, $user['password']);
+    } catch (Exception $e) {
+        return false;
+    }
+}
+
+/**
+ * Require admin password for sensitive operations
+ * Dies with error message if password is invalid
+ * @param string $passwordField POST field name for password (default: 'admin_password')
+ * @param PDO $pdo Database connection
+ * @param string $redirectTo URL to redirect on failure (optional)
+ */
+function require_admin_password($passwordField = 'admin_password', $pdo, $redirectTo = null) {
+    $password = $_POST[$passwordField] ?? '';
+    
+    if (!verify_admin_password($password, $pdo)) {
+        if ($redirectTo) {
+            $_SESSION['error'] = 'Password administrator tidak valid. Operasi dibatalkan.';
+            header('Location: ' . $redirectTo);
+            exit;
+        }
+        http_response_code(403);
+        die('Password administrator tidak valid. Operasi dibatalkan.');
+    }
 }
 
 /**

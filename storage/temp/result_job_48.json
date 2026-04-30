@@ -1,0 +1,46 @@
+﻿[
+    {
+        "status":  "sent",
+        "message":  "OK",
+        "id":  "669",
+        "related_ids":  [
+                            "669",
+                            "670",
+                            "671",
+                            "672",
+                            "673"
+                        ]
+    },
+    {
+        "status":  "sent",
+        "message":  "OK",
+        "id":  "674",
+        "related_ids":  [
+                            "674",
+                            "675",
+                            "676",
+                            "677",
+                            "678"
+                        ]
+    },
+    {
+        "status":  "sent",
+        "message":  "OK",
+        "id":  "679",
+        "related_ids":  [
+                            "679",
+                            "680",
+                            "681",
+                            "682"
+                        ]
+    },
+    {
+        "status":  "sent",
+        "message":  "OK",
+        "id":  "683",
+        "related_ids":  [
+                            "683",
+                            "684"
+                        ]
+    }
+]

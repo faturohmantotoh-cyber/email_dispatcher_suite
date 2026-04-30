@@ -196,6 +196,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $activeTab === 'users' && $currentU
         if ($action === 'delete') {
             $deleteId = (int)($_POST['delete_id'] ?? 0);
             if ($deleteId > 0 && $deleteId !== $currentUser['id']) {
+                // Require admin password verification
+                require_admin_password('admin_password', $pdo, 'settings.php?tab=users');
+                
                 try {
                     // Get user info before delete for audit log
                     $delStmt = $pdo->prepare("SELECT username, email FROM users WHERE id = ?");
@@ -390,6 +393,12 @@ $allUsers = [];
 if ($currentUser['role'] === 'admin') {
     $result = $pdo->query("SELECT id, username, email, display_name, role, created_at FROM users ORDER BY created_at DESC");
     $allUsers = $result->fetchAll();
+    
+    // Get current email sending mode from database
+    $stmt = $pdo->prepare("SELECT value FROM system_settings WHERE `key` = 'email_sending_mode'");
+    $stmt->execute();
+    $modeResult = $stmt->fetch();
+    $currentEmailMode = $modeResult['value'] ?? EMAIL_SENDING_MODE;
 }
 
 // Handle maintenance - cleanup old jobs (admin only)
@@ -437,6 +446,104 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     SecurityManager::logSecurityEvent('maintenance_failed', $currentUser['id'], $e->getMessage());
                 }
             }
+        }
+    }
+}
+
+// Handle email sending mode configuration (admin only)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'save_email_mode') {
+    // CSRF protection
+    if (!SecurityManager::verifyCSRFToken($_POST['csrf_token'] ?? '')) {
+        $message = 'Token keamanan tidak valid. Silakan coba lagi.';
+        $messageType = 'error';
+    } elseif ($currentUser['role'] !== 'admin') {
+        $message = 'Hanya admin yang dapat mengubah konfigurasi email.';
+        $messageType = 'error';
+    } else {
+        $emailMode = $_POST['email_sending_mode'] ?? 'outlook_com';
+        
+        // Validate mode
+        if (!in_array($emailMode, ['outlook_com', 'graph_api', 'smtp'])) {
+            $message = 'Mode pengiriman email tidak valid.';
+            $messageType = 'error';
+        } else {
+            try {
+                // Check if setting exists
+                $stmt = $pdo->prepare("SELECT id FROM system_settings WHERE `key` = 'email_sending_mode'");
+                $stmt->execute();
+                $existing = $stmt->fetch();
+                
+                if ($existing) {
+                    // Update existing setting
+                    $stmt = $pdo->prepare("UPDATE system_settings SET value = ?, updated_at = NOW() WHERE `key` = 'email_sending_mode'");
+                    $stmt->execute([$emailMode]);
+                } else {
+                    // Insert new setting
+                    $stmt = $pdo->prepare("INSERT INTO system_settings (`key`, value, type, description) VALUES ('email_sending_mode', ?, 'string', 'Email sending mode: outlook_com, graph_api, or smtp')");
+                    $stmt->execute([$emailMode]);
+                }
+                
+                SecurityManager::logSecurityEvent('email_mode_changed', $currentUser['id'], "Email sending mode changed to: $emailMode");
+                
+                $modeNames = [
+                    'outlook_com' => 'Outlook COM',
+                    'graph_api' => 'Microsoft Graph API',
+                    'smtp' => 'SMTP Direct'
+                ];
+                $message = '✅ Mode pengiriman email berhasil diubah ke ' . ($modeNames[$emailMode] ?? $emailMode);
+                $messageType = 'success';
+            } catch (Exception $e) {
+                $message = 'Gagal mengubah mode pengiriman email: ' . $e->getMessage();
+                $messageType = 'error';
+                SecurityManager::logSecurityEvent('email_mode_change_failed', $currentUser['id'], $e->getMessage());
+            }
+        }
+    }
+}
+
+// Handle SMTP configuration (admin only)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'save_smtp_config') {
+    // CSRF protection
+    if (!SecurityManager::verifyCSRFToken($_POST['csrf_token'] ?? '')) {
+        $message = 'Token keamanan tidak valid. Silakan coba lagi.';
+        $messageType = 'error';
+    } elseif ($currentUser['role'] !== 'admin') {
+        $message = 'Hanya admin yang dapat mengubah konfigurasi SMTP.';
+        $messageType = 'error';
+    } else {
+        try {
+            $smtpSettings = [
+                'smtp_host' => $_POST['smtp_host'] ?? '',
+                'smtp_port' => $_POST['smtp_port'] ?? '587',
+                'smtp_username' => $_POST['smtp_username'] ?? '',
+                'smtp_password' => $_POST['smtp_password'] ?? '',
+                'smtp_encryption' => $_POST['smtp_encryption'] ?? 'tls',
+                'smtp_from_email' => $_POST['smtp_from_email'] ?? '',
+                'smtp_from_name' => $_POST['smtp_from_name'] ?? 'Email Dispatcher'
+            ];
+            
+            foreach ($smtpSettings as $key => $value) {
+                $stmt = $pdo->prepare("SELECT id FROM system_settings WHERE `key` = ?");
+                $stmt->execute([$key]);
+                $existing = $stmt->fetch();
+                
+                if ($existing) {
+                    $stmt = $pdo->prepare("UPDATE system_settings SET value = ?, updated_at = NOW() WHERE `key` = ?");
+                    $stmt->execute([$value, $key]);
+                } else {
+                    $stmt = $pdo->prepare("INSERT INTO system_settings (`key`, value, type, description) VALUES (?, ?, 'string', 'SMTP configuration')");
+                    $stmt->execute([$key, $value]);
+                }
+            }
+            
+            SecurityManager::logSecurityEvent('smtp_config_updated', $currentUser['id'], 'SMTP configuration updated');
+            
+            $message = '✅ Konfigurasi SMTP berhasil disimpan.';
+            $messageType = 'success';
+        } catch (Exception $e) {
+            $message = 'Gagal menyimpan konfigurasi SMTP: ' . $e->getMessage();
+            $messageType = 'error';
+            SecurityManager::logSecurityEvent('smtp_config_failed', $currentUser['id'], $e->getMessage());
         }
     }
 }
@@ -699,6 +806,7 @@ main.transitioning { animation: fadeOut 0.3s ease-out forwards; }
         <button type="button" class="tab-btn <?= $activeTab === 'password' ? 'active' : '' ?>" onclick="switchTab('password')">🔐 Ubah Password</button>
         <?php if ($currentUser['role'] === 'admin'): ?>
         <button type="button" class="tab-btn <?= $activeTab === 'users' ? 'active' : '' ?>" onclick="switchTab('users')">👥 Kelola User</button>
+        <button type="button" class="tab-btn <?= $activeTab === 'email' ? 'active' : '' ?>" onclick="switchTab('email')">📧 Konfigurasi Email</button>
         <button type="button" class="tab-btn <?= $activeTab === 'maintenance' ? 'active' : '' ?>" onclick="switchTab('maintenance')">🔧 Maintenance</button>
         <button type="button" class="tab-btn <?= $activeTab === 'security' ? 'active' : '' ?>" onclick="switchTab('security')">🛡️ Keamanan & Deliverability</button>
         <?php endif; ?>
@@ -837,12 +945,7 @@ main.transitioning { animation: fadeOut 0.3s ease-out forwards; }
                 </button>
                 
                 <!-- Delete Button -->
-                <form method="post" action="?tab=users" style="display:inline;margin-left:4px;">
-                  <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
-                  <input type="hidden" name="action" value="delete">
-                  <input type="hidden" name="delete_id" value="<?= (int)$u['id'] ?>">
-                  <button type="submit" class="btn btn.sm danger" onclick="return confirm('Yakin hapus user ini?')" style="padding:4px 8px;font-size:12px;background:#dc2626;color:#fff;border:0;border-radius:4px;cursor:pointer;">🗑 Hapus</button>
-                </form>
+                <button type="button" class="btn btn.sm danger" onclick="confirmDeleteUser(<?= (int)$u['id'] ?>, '<?= e($u['username']) ?>')" style="padding:4px 8px;font-size:12px;background:#dc2626;color:#fff;border:0;border-radius:4px;cursor:pointer;">🗑 Hapus</button>
                 <?php else: ?>
                 <small style="color:#999;">(User saat ini)</small>
                 <?php endif; ?>
@@ -891,6 +994,301 @@ main.transitioning { animation: fadeOut 0.3s ease-out forwards; }
 
         <div style="background:#f0fdf4;border-left:4px solid #059669;padding:12px;border-radius:4px;">
           <strong>💡 Catatan:</strong> Proses cleanup dilakukan secara aman. Hanya job yang sudah selesai (status: completed/failed) yang dihapus.
+        </div>
+        
+        <div style="margin-top:24px;">
+          <a href="index.php" class="btn secondary">⟵ Kembali</a>
+        </div>
+      </div>
+
+      <!-- Tab 3: Email Configuration (Admin Only) -->
+      <div id="email" class="tab-content <?= $activeTab === 'email' ? 'active' : '' ?>">
+        <h4>📧 Konfigurasi Pengiriman Email</h4>
+        <p style="color:#666;margin-bottom:16px;">Pilih metode pengiriman email yang akan digunakan oleh sistem.</p>
+        
+        <form method="post" action="?tab=email">
+          <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
+          <input type="hidden" name="action" value="save_email_mode">
+          
+          <style>
+            .email-mode-card {
+              position: relative;
+              display: flex;
+              align-items: flex-start;
+              gap: 16px;
+              padding: 20px;
+              background: #fff;
+              border: 2px solid #e5e7eb;
+              border-radius: 12px;
+              cursor: pointer;
+              transition: all 0.2s ease;
+            }
+            .email-mode-card:hover {
+              border-color: #93c5fd;
+              box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
+              transform: translateY(-2px);
+            }
+            .email-mode-card.selected {
+              border-color: #3b82f6;
+              background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+              box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+            }
+            .email-mode-icon {
+              width: 56px;
+              height: 56px;
+              border-radius: 12px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 28px;
+              flex-shrink: 0;
+            }
+            .email-mode-card.outlook .email-mode-icon {
+              background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            }
+            .email-mode-card.graph .email-mode-icon {
+              background: linear-gradient(135deg, #dbeafe 0%, #93c5fd 100%);
+            }
+            .email-mode-card.smtp .email-mode-icon {
+              background: linear-gradient(135deg, #dcfce7 0%, #86efac 100%);
+            }
+            .email-mode-radio {
+              position: absolute;
+              top: 20px;
+              right: 20px;
+              width: 24px;
+              height: 24px;
+              border: 2px solid #d1d5db;
+              border-radius: 50%;
+              cursor: pointer;
+              transition: all 0.2s ease;
+            }
+            .email-mode-radio:checked {
+              border-color: #3b82f6;
+              background: #3b82f6;
+            }
+            .email-mode-radio:checked::after {
+              content: '✓';
+              position: absolute;
+              top: 50%;
+              left: 50%;
+              transform: translate(-50%, -50%);
+              color: white;
+              font-size: 12px;
+              font-weight: bold;
+            }
+            .email-mode-title {
+              font-weight: 700;
+              font-size: 16px;
+              color: #1f2937;
+              margin-bottom: 8px;
+            }
+            .email-mode-desc {
+              color: #6b7280;
+              font-size: 14px;
+              line-height: 1.6;
+            }
+            .email-mode-features {
+              margin-top: 12px;
+              display: flex;
+              flex-direction: column;
+              gap: 4px;
+            }
+            .email-mode-feature {
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              font-size: 13px;
+            }
+            .email-mode-feature.pros {
+              color: #059669;
+            }
+            .email-mode-feature.cons {
+              color: #dc2626;
+            }
+          </style>
+          
+          <div style="display:grid;gap:16px;">
+            <!-- Outlook COM Card -->
+            <label class="email-mode-card outlook <?= $currentEmailMode === 'outlook_com' ? 'selected' : '' ?>">
+              <input type="radio" name="email_sending_mode" value="outlook_com" <?= $currentEmailMode === 'outlook_com' ? 'checked' : '' ?> class="email-mode-radio">
+              <div class="email-mode-icon">🖥️</div>
+              <div>
+                <div class="email-mode-title">Outlook COM</div>
+                <div class="email-mode-desc">Menggunakan Outlook desktop application di server untuk mengirim email.</div>
+                <div class="email-mode-features">
+                  <div class="email-mode-feature pros">
+                    <span>✓</span> Tidak perlu setup Azure AD
+                  </div>
+                  <div class="email-mode-feature cons">
+                    <span>⚠</span> Outlook di server harus ON
+                  </div>
+                  <div class="email-mode-feature cons">
+                    <span>⚠</span> Sent items muncul di Outlook server
+                  </div>
+                </div>
+              </div>
+            </label>
+            
+            <!-- Graph API Card -->
+            <label class="email-mode-card graph <?= $currentEmailMode === 'graph_api' ? 'selected' : '' ?>">
+              <input type="radio" name="email_sending_mode" value="graph_api" <?= $currentEmailMode === 'graph_api' ? 'checked' : '' ?> class="email-mode-radio">
+              <div class="email-mode-icon">☁️</div>
+              <div>
+                <div class="email-mode-title">Microsoft Graph API</div>
+                <div class="email-mode-desc">Mengirim email langsung melalui Microsoft Graph API (Office 365).</div>
+                <div class="email-mode-features">
+                  <div class="email-mode-feature pros">
+                    <span>✓</span> Tidak perlu Outlook di server
+                  </div>
+                  <div class="email-mode-feature pros">
+                    <span>✓</span> Sent items di mailbox user masing-masing
+                  </div>
+                  <div class="email-mode-feature cons">
+                    <span>⚠</span> Perlu setup Azure AD dan Office 365
+                  </div>
+                </div>
+              </div>
+            </label>
+            
+            <!-- SMTP Card -->
+            <label class="email-mode-card smtp <?= $currentEmailMode === 'smtp' ? 'selected' : '' ?>">
+              <input type="radio" name="email_sending_mode" value="smtp" <?= $currentEmailMode === 'smtp' ? 'checked' : '' ?> class="email-mode-radio">
+              <div class="email-mode-icon">📧</div>
+              <div>
+                <div class="email-mode-title">SMTP Direct (Rekomendasi)</div>
+                <div class="email-mode-desc">Mengirim email langsung melalui server SMTP. Paling mudah dan fleksibel.</div>
+                <div class="email-mode-features">
+                  <div class="email-mode-feature pros">
+                    <span>✓</span> Paling mudah setup (hanya butuh SMTP credentials)
+                  </div>
+                  <div class="email-mode-feature pros">
+                    <span>✓</span> Sangat fleksibel (bisa pakai provider apa saja)
+                  </div>
+                  <div class="email-mode-feature pros">
+                    <span>✓</span> Tidak perlu Outlook di server atau Azure AD
+                  </div>
+                </div>
+              </div>
+            </label>
+          </div>
+          
+          <div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:12px;border-radius:8px;margin:20px 0;">
+            <strong>⚠️ Perhatian:</strong> Setelah mengubah mode, sistem akan menggunakan metode baru untuk semua pengiriman email berikutnya.
+          </div>
+          
+          <?php if ($currentEmailMode === 'graph_api'): ?>
+          <div style="background:#dbeafe;border:1px solid #3b82f6;border-radius:8px;padding:16px;margin:20px 0;">
+            <div style="font-weight:600;color:#1e40af;margin-bottom:12px;">ℹ️ Status Konfigurasi Graph API</div>
+            <div style="display:grid;gap:8px;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span>Tenant ID:</span>
+                <?= empty(GRAPH_TENANT_ID) ? '<span style="background:#fee2e2;color:#dc2626;padding:4px 8px;border-radius:4px;font-size:12px;font-weight:500;">⚠️ Tidak dikonfigurasi</span>' : '<span style="background:#dcfce7;color:#059669;padding:4px 8px;border-radius:4px;font-size:12px;font-weight:500;">✓ Terkonfigurasi</span>' ?>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span>Client ID:</span>
+                <?= empty(GRAPH_CLIENT_ID) ? '<span style="background:#fee2e2;color:#dc2626;padding:4px 8px;border-radius:4px;font-size:12px;font-weight:500;">⚠️ Tidak dikonfigurasi</span>' : '<span style="background:#dcfce7;color:#059669;padding:4px 8px;border-radius:4px;font-size:12px;font-weight:500;">✓ Terkonfigurasi</span>' ?>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span>Client Secret:</span>
+                <?= empty(GRAPH_CLIENT_SECRET) ? '<span style="background:#fee2e2;color:#dc2626;padding:4px 8px;border-radius:4px;font-size:12px;font-weight:500;">⚠️ Tidak dikonfigurasi</span>' : '<span style="background:#dcfce7;color:#059669;padding:4px 8px;border-radius:4px;font-size:12px;font-weight:500;">✓ Terkonfigurasi</span>' ?>
+              </div>
+            </div>
+            <div style="margin-top:12px;padding-top:12px;border-top:1px solid #93c5fd;">
+              <small style="color:#1e40af;">📖 Lihat file <code style="background:#eff6ff;padding:2px 6px;border-radius:4px;">GRAPH_API_SETUP.md</code> untuk panduan konfigurasi lengkap.</small>
+            </div>
+          </div>
+          <?php endif; ?>
+          
+          <?php if ($currentEmailMode === 'smtp'): ?>
+          <div style="background:#dcfce7;border:1px solid #059669;border-radius:8px;padding:16px;margin:20px 0;">
+            <div style="font-weight:600;color:#065f46;margin-bottom:12px;">ℹ️ Status Konfigurasi SMTP</div>
+            <div style="display:grid;gap:8px;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span>SMTP Host:</span>
+                <?= empty(SMTP_HOST) ? '<span style="background:#fee2e2;color:#dc2626;padding:4px 8px;border-radius:4px;font-size:12px;font-weight:500;">⚠️ Tidak dikonfigurasi</span>' : '<span style="background:#dcfce7;color:#059669;padding:4px 8px;border-radius:4px;font-size:12px;font-weight:500;">✓ ' . e(SMTP_HOST) . '</span>' ?>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span>SMTP Port:</span>
+                <?= empty(SMTP_PORT) ? '<span style="background:#fee2e2;color:#dc2626;padding:4px 8px;border-radius:4px;font-size:12px;font-weight:500;">⚠️ Tidak dikonfigurasi</span>' : '<span style="background:#dcfce7;color:#059669;padding:4px 8px;border-radius:4px;font-size:12px;font-weight:500;">✓ ' . e(SMTP_PORT) . '</span>' ?>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span>SMTP Username:</span>
+                <?= empty(SMTP_USERNAME) ? '<span style="background:#fee2e2;color:#dc2626;padding:4px 8px;border-radius:4px;font-size:12px;font-weight:500;">⚠️ Tidak dikonfigurasi</span>' : '<span style="background:#dcfce7;color:#059669;padding:4px 8px;border-radius:4px;font-size:12px;font-weight:500;">✓ ' . e(SMTP_USERNAME) . '</span>' ?>
+              </div>
+            </div>
+            <div style="margin-top:12px;padding-top:12px;border-top:1px solid #86efac;">
+              <small style="color:#065f46;">📖 Konfigurasi SMTP di bawah (SMTP Configuration Form).</small>
+            </div>
+          </div>
+          <?php endif; ?>
+          
+          <button type="submit" class="btn" style="background:#3b82f6;padding:12px 24px;border-radius:8px;font-weight:600;font-size:14px;box-shadow:0 4px 12px rgba(59, 130, 246, 0.3);transition:all 0.2s ease;">
+            Simpan Konfigurasi
+          </button>
+        </form>
+        
+        <!-- SMTP Configuration Form -->
+        <div style="margin-top:40px;background:#f3f4f6;border:1px solid #d1d5db;border-radius:12px;padding:24px;">
+          <h5 style="margin-top:0;margin-bottom:16px;">📧 SMTP Configuration Form</h5>
+          <p style="color:#666;font-size:14px;margin-bottom:20px;">Konfigurasi SMTP server untuk mengirim email.</p>
+          
+          <form method="post" action="?tab=email">
+            <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
+            <input type="hidden" name="action" value="save_smtp_config">
+            
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+              <div>
+                <label style="display:block;font-weight:600;margin-bottom:6px;font-size:14px;">SMTP Host</label>
+                <input type="text" name="smtp_host" value="<?= e(SMTP_HOST) ?>" placeholder="smtp.gmail.com" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;box-sizing:border-box;">
+                <small style="color:#666;font-size:12px;">Contoh: smtp.gmail.com, smtp.office365.com</small>
+              </div>
+              
+              <div>
+                <label style="display:block;font-weight:600;margin-bottom:6px;font-size:14px;">SMTP Port</label>
+                <input type="number" name="smtp_port" value="<?= e(SMTP_PORT) ?>" placeholder="587" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;box-sizing:border-box;">
+                <small style="color:#666;font-size:12px;">Biasanya 587 (TLS) atau 465 (SSL)</small>
+              </div>
+              
+              <div>
+                <label style="display:block;font-weight:600;margin-bottom:6px;font-size:14px;">SMTP Username</label>
+                <input type="text" name="smtp_username" value="<?= e(SMTP_USERNAME) ?>" placeholder="your-email@gmail.com" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;box-sizing:border-box;">
+                <small style="color:#666;font-size:12px;">Email SMTP Anda</small>
+              </div>
+              
+              <div>
+                <label style="display:block;font-weight:600;margin-bottom:6px;font-size:14px;">SMTP Password</label>
+                <input type="password" name="smtp_password" value="<?= e(SMTP_PASSWORD) ?>" placeholder="••••••••" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;box-sizing:border-box;">
+                <small style="color:#666;font-size:12px;">Password atau App Password</small>
+              </div>
+              
+              <div>
+                <label style="display:block;font-weight:600;margin-bottom:6px;font-size:14px;">Encryption</label>
+                <select name="smtp_encryption" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;box-sizing:border-box;">
+                  <option value="tls" <?= SMTP_ENCRYPTION === 'tls' ? 'selected' : '' ?>>TLS (Recommended)</option>
+                  <option value="ssl" <?= SMTP_ENCRYPTION === 'ssl' ? 'selected' : '' ?>>SSL</option>
+                  <option value="none" <?= SMTP_ENCRYPTION === 'none' ? 'selected' : '' ?>>None (Not Recommended)</option>
+                </select>
+                <small style="color:#666;font-size:12px;">TLS/SSL untuk keamanan enkripsi</small>
+              </div>
+              
+              <div>
+                <label style="display:block;font-weight:600;margin-bottom:6px;font-size:14px;">From Email</label>
+                <input type="email" name="smtp_from_email" value="<?= e(SMTP_FROM_EMAIL) ?>" placeholder="sender@company.com" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;box-sizing:border-box;">
+                <small style="color:#666;font-size:12px;">Email pengirim (default: SMTP username)</small>
+              </div>
+              
+              <div style="grid-column:1/-1;">
+                <label style="display:block;font-weight:600;margin-bottom:6px;font-size:14px;">From Name</label>
+                <input type="text" name="smtp_from_name" value="<?= e(SMTP_FROM_NAME) ?>" placeholder="Email Dispatcher" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;box-sizing:border-box;">
+                <small style="color:#666;font-size:12px;">Nama pengirim yang akan tampil di email</small>
+              </div>
+            </div>
+            
+            <button type="submit" class="btn" style="background:#059669;padding:12px 24px;border-radius:8px;font-weight:600;font-size:14px;box-shadow:0 4px 12px rgba(5, 150, 105, 0.3);transition:all 0.2s ease;margin-top:20px;">
+              Simpan Konfigurasi SMTP
+            </button>
+          </form>
         </div>
         
         <div style="margin-top:24px;">
@@ -1025,6 +1423,81 @@ function closeResetPasswordModal() {
   const modal = document.getElementById('resetPasswordModal');
   if (modal) {
     modal.classList.remove('active');
+  }
+}
+
+async function confirmDeleteUser(userId, username) {
+  const result = await Swal.fire({
+    title: 'Hapus User?',
+    html: '<p style="color: #666; font-size: 14px;">Anda akan menghapus user <strong>' + username + '</strong>.</p><p style="color: #dc3545; font-weight: bold;">⚠️ Tindakan ini TIDAK DAPAT DIBATALKAN!</p>',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'Ya, Hapus',
+    confirmButtonColor: '#dc2626',
+    cancelButtonText: 'Batal',
+    cancelButtonColor: '#6b7280',
+    allowOutsideClick: false,
+    allowEscapeKey: false
+  });
+  
+  if (result.isConfirmed) {
+    // Prompt for admin password
+    const { value: password } = await Swal.fire({
+      title: 'Konfirmasi Password Administrator',
+      input: 'password',
+      inputLabel: 'Masukkan password Anda untuk melanjutkan:',
+      inputPlaceholder: 'Password',
+      inputAttributes: {
+        maxlength: 50,
+        autocapitalize: 'off',
+        autocorrect: 'off'
+      },
+      showCancelButton: true,
+      confirmButtonText: 'Konfirmasi',
+      confirmButtonColor: '#dc2626',
+      cancelButtonText: 'Batal',
+      cancelButtonColor: '#6b7280',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      inputValidator: (value) => {
+        if (!value) {
+          return 'Password wajib diisi!'
+        }
+      }
+    });
+    
+    if (password) {
+      const form = document.createElement('form');
+      form.method = 'post';
+      form.action = '?tab=users';
+      
+      const csrfInput = document.createElement('input');
+      csrfInput.type = 'hidden';
+      csrfInput.name = 'csrf_token';
+      csrfInput.value = '<?= e($csrf) ?>';
+      
+      const actionInput = document.createElement('input');
+      actionInput.type = 'hidden';
+      actionInput.name = 'action';
+      actionInput.value = 'delete';
+      
+      const deleteIdInput = document.createElement('input');
+      deleteIdInput.type = 'hidden';
+      deleteIdInput.name = 'delete_id';
+      deleteIdInput.value = userId;
+      
+      const passwordInput = document.createElement('input');
+      passwordInput.type = 'hidden';
+      passwordInput.name = 'admin_password';
+      passwordInput.value = password;
+      
+      form.appendChild(csrfInput);
+      form.appendChild(actionInput);
+      form.appendChild(deleteIdInput);
+      form.appendChild(passwordInput);
+      document.body.appendChild(form);
+      form.submit();
+    }
   }
 }
 

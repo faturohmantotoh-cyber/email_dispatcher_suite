@@ -256,6 +256,13 @@ if ($action === 'delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         exit(json_encode(['error' => 'CSRF token invalid']));
     }
     
+    // Verify admin password
+    $password = $_POST['admin_password'] ?? '';
+    if (!verify_admin_password($password, $pdo)) {
+        http_response_code(403);
+        exit(json_encode(['error' => 'Invalid admin password']));
+    }
+    
     $templateId = (int)($_POST['id'] ?? 0);
     
     if ($templateId <= 0) {

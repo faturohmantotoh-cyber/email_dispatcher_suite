@@ -56,6 +56,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     // Remove from suppression list
     if (isset($_POST['remove_suppression'])) {
+        // Require admin password verification
+        require_admin_password('admin_password', $pdo, 'suppression.php');
+        
         $id = intval($_POST['id'] ?? 0);
         if ($id) {
             try {
@@ -496,14 +499,9 @@ $totalPages = ceil($totalCount / $perPage);
                         <td><?= e($record['source'] ?? '—') ?></td>
                         <td><?= date('Y-m-d H:i', strtotime($record['created_at'])) ?></td>
                         <td>
-                            <form method="post" style="display:inline;" 
-                                  onsubmit="return confirm('Remove this email from suppression list?');">
-                                <?= csrf_field() ?>
-                                <input type="hidden" name="id" value="<?= $record['id'] ?>">
-                                <button type="submit" name="remove_suppression" class="btn btn-secondary" style="padding:6px 12px; font-size:12px;">
-                                    Remove
-                                </button>
-                            </form>
+                            <button type="button" onclick="confirmRemoveSuppression(<?= $record['id'] ?>, '<?= e($record['email']) ?>')" class="btn btn-secondary" style="padding:6px 12px; font-size:12px;">
+                                Remove
+                            </button>
                         </td>
                     </tr>
                     <?php endforeach; ?>
@@ -535,4 +533,82 @@ $totalPages = ceil($totalCount / $perPage);
         </div>
     </div>
 </body>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+async function confirmRemoveSuppression(id, email) {
+  const result = await Swal.fire({
+    title: 'Remove from Suppression List?',
+    html: '<p style="color: #666; font-size: 14px;">Anda akan menghapus <strong>' + email + '</strong> dari daftar suppression.</p><p style="color: #dc3545; font-weight: bold;">⚠️ Email ini akan dapat menerima email lagi!</p>',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'Ya, Hapus',
+    confirmButtonColor: '#dc2626',
+    cancelButtonText: 'Batal',
+    cancelButtonColor: '#6b7280',
+    allowOutsideClick: false,
+    allowEscapeKey: false
+  });
+  
+  if (result.isConfirmed) {
+    // Prompt for admin password
+    const { value: password } = await Swal.fire({
+      title: 'Konfirmasi Password Administrator',
+      input: 'password',
+      inputLabel: 'Masukkan password Anda untuk melanjutkan:',
+      inputPlaceholder: 'Password',
+      inputAttributes: {
+        maxlength: 50,
+        autocapitalize: 'off',
+        autocorrect: 'off'
+      },
+      showCancelButton: true,
+      confirmButtonText: 'Konfirmasi',
+      confirmButtonColor: '#dc2626',
+      cancelButtonText: 'Batal',
+      cancelButtonColor: '#6b7280',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      inputValidator: (value) => {
+        if (!value) {
+          return 'Password wajib diisi!'
+        }
+      }
+    });
+    
+    if (password) {
+      const form = document.createElement('form');
+      form.method = 'post';
+      form.action = 'suppression.php';
+      
+      const csrfInput = document.createElement('input');
+      csrfInput.type = 'hidden';
+      csrfInput.name = 'csrf_token';
+      csrfInput.value = '<?= $csrf ?>';
+      
+      const idInput = document.createElement('input');
+      idInput.type = 'hidden';
+      idInput.name = 'id';
+      idInput.value = id;
+      
+      const removeInput = document.createElement('input');
+      removeInput.type = 'hidden';
+      removeInput.name = 'remove_suppression';
+      removeInput.value = '1';
+      
+      const passwordInput = document.createElement('input');
+      passwordInput.type = 'hidden';
+      passwordInput.name = 'admin_password';
+      passwordInput.value = password;
+      
+      form.appendChild(csrfInput);
+      form.appendChild(idInput);
+      form.appendChild(removeInput);
+      form.appendChild(passwordInput);
+      document.body.appendChild(form);
+      form.submit();
+    }
+  }
+}
+</script>
 </html>

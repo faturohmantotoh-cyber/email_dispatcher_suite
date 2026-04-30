@@ -62,6 +62,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     
     if (isset($_POST['delete_webhook'])) {
+        // Require admin password verification
+        require_admin_password('admin_password', $pdo, 'webhooks.php');
+        
         $id = intval($_POST['id'] ?? 0);
         if ($id) {
             try {
@@ -381,11 +384,7 @@ $eventTypes = ['sent', 'delivered', 'opened', 'clicked', 'bounced', 'failed', 'c
                                 <input type="hidden" name="id" value="<?= $webhook['id'] ?>">
                                 <button type="submit" name="test_webhook" class="btn btn-success" style="padding:6px 12px; font-size:12px;">Test</button>
                             </form>
-                            <form method="post" style="display:inline;" onsubmit="return confirm('Delete this webhook?');">
-                                <?= csrf_field() ?>
-                                <input type="hidden" name="id" value="<?= $webhook['id'] ?>">
-                                <button type="submit" name="delete_webhook" class="btn btn-danger" style="padding:6px 12px; font-size:12px;">Delete</button>
-                            </form>
+                            <button type="button" onclick="confirmDeleteWebhook(<?= $webhook['id'] ?>)" class="btn btn-danger" style="padding:6px 12px; font-size:12px;">Delete</button>
                         </div>
                     </div>
                     <div class="webhook-url"><?= e($webhook['url']) ?></div>
@@ -433,4 +432,82 @@ $eventTypes = ['sent', 'delivered', 'opened', 'clicked', 'bounced', 'failed', 'c
         </div>
     </div>
 </body>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+async function confirmDeleteWebhook(webhookId) {
+  const result = await Swal.fire({
+    title: 'Delete Webhook?',
+    html: '<p style="color: #666; font-size: 14px;">Anda akan menghapus webhook ini.</p><p style="color: #dc3545; font-weight: bold;">⚠️ Tindakan ini TIDAK DAPAT DIBATALKAN!</p>',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'Ya, Hapus',
+    confirmButtonColor: '#dc2626',
+    cancelButtonText: 'Batal',
+    cancelButtonColor: '#6b7280',
+    allowOutsideClick: false,
+    allowEscapeKey: false
+  });
+  
+  if (result.isConfirmed) {
+    // Prompt for admin password
+    const { value: password } = await Swal.fire({
+      title: 'Konfirmasi Password Administrator',
+      input: 'password',
+      inputLabel: 'Masukkan password Anda untuk melanjutkan:',
+      inputPlaceholder: 'Password',
+      inputAttributes: {
+        maxlength: 50,
+        autocapitalize: 'off',
+        autocorrect: 'off'
+      },
+      showCancelButton: true,
+      confirmButtonText: 'Konfirmasi',
+      confirmButtonColor: '#dc2626',
+      cancelButtonText: 'Batal',
+      cancelButtonColor: '#6b7280',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      inputValidator: (value) => {
+        if (!value) {
+          return 'Password wajib diisi!'
+        }
+      }
+    });
+    
+    if (password) {
+      const form = document.createElement('form');
+      form.method = 'post';
+      form.action = 'webhooks.php';
+      
+      const csrfInput = document.createElement('input');
+      csrfInput.type = 'hidden';
+      csrfInput.name = 'csrf_token';
+      csrfInput.value = '<?= $csrf ?>';
+      
+      const idInput = document.createElement('input');
+      idInput.type = 'hidden';
+      idInput.name = 'id';
+      idInput.value = webhookId;
+      
+      const deleteInput = document.createElement('input');
+      deleteInput.type = 'hidden';
+      deleteInput.name = 'delete_webhook';
+      deleteInput.value = '1';
+      
+      const passwordInput = document.createElement('input');
+      passwordInput.type = 'hidden';
+      passwordInput.name = 'admin_password';
+      passwordInput.value = password;
+      
+      form.appendChild(csrfInput);
+      form.appendChild(idInput);
+      form.appendChild(deleteInput);
+      form.appendChild(passwordInput);
+      document.body.appendChild(form);
+      form.submit();
+    }
+  }
+}
+</script>
 </html>

@@ -396,6 +396,9 @@ $totalContacts = (int)$pdo->query("SELECT COUNT(*) FROM contacts")->fetchColumn(
 
 // ===== DELETE ATTACHMENT HANDLING =====
 if (isset($_POST['delete_attachment'])) {
+    // Require admin password verification
+    require_admin_password('admin_password', $pdo, 'compose.php');
+    
     $attachId = (int)($_POST['delete_attachment'] ?? 0);
     if ($attachId > 0) {
         $stmt = $pdo->prepare("SELECT * FROM attachments WHERE id = ?");
@@ -1822,6 +1825,75 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 });
+
+async function confirmDeleteAttachment(attachId, filename) {
+  const result = await Swal.fire({
+    title: 'Hapus Lampiran?',
+    html: '<p style="color: #666; font-size: 14px;">Anda akan menghapus file <strong>' + filename + '</strong>.</p><p style="color: #dc3545; font-weight: bold;">⚠️ Tindakan ini TIDAK DAPAT DIBATALKAN!</p>',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'Ya, Hapus',
+    confirmButtonColor: '#dc2626',
+    cancelButtonText: 'Batal',
+    cancelButtonColor: '#6b7280',
+    allowOutsideClick: false,
+    allowEscapeKey: false
+  });
+  
+  if (result.isConfirmed) {
+    // Prompt for admin password
+    const { value: password } = await Swal.fire({
+      title: 'Konfirmasi Password Administrator',
+      input: 'password',
+      inputLabel: 'Masukkan password Anda untuk melanjutkan:',
+      inputPlaceholder: 'Password',
+      inputAttributes: {
+        maxlength: 50,
+        autocapitalize: 'off',
+        autocorrect: 'off'
+      },
+      showCancelButton: true,
+      confirmButtonText: 'Konfirmasi',
+      confirmButtonColor: '#dc2626',
+      cancelButtonText: 'Batal',
+      cancelButtonColor: '#6b7280',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      inputValidator: (value) => {
+        if (!value) {
+          return 'Password wajib diisi!'
+        }
+      }
+    });
+    
+    if (password) {
+      const form = document.createElement('form');
+      form.method = 'post';
+      form.action = 'compose.php';
+      
+      const csrfInput = document.createElement('input');
+      csrfInput.type = 'hidden';
+      csrfInput.name = 'csrf_token';
+      csrfInput.value = '<?= $csrf ?>';
+      
+      const attachInput = document.createElement('input');
+      attachInput.type = 'hidden';
+      attachInput.name = 'delete_attachment';
+      attachInput.value = attachId;
+      
+      const passwordInput = document.createElement('input');
+      passwordInput.type = 'hidden';
+      passwordInput.name = 'admin_password';
+      passwordInput.value = password;
+      
+      form.appendChild(csrfInput);
+      form.appendChild(attachInput);
+      form.appendChild(passwordInput);
+      document.body.appendChild(form);
+      form.submit();
+    }
+  }
+}
 </script>
 <!-- Quill Rich Text Editor -->
 <link href="https://cdn.jsdelivr.net/npm/quill@2.0.0/dist/quill.snow.css?v=2.0" rel="stylesheet">
@@ -1887,10 +1959,7 @@ document.addEventListener('DOMContentLoaded', () => {
                       <td><?= e(human_filesize((int)$a['size'])) ?></td>
                       <td><?= e($a['uploaded_at']) ?></td>
                       <td style="text-align:center;">
-                        <form method="post" action="compose.php" style="display:inline;">
-                          <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
-                          <button type="submit" name="delete_attachment" value="<?= (int)$a['id'] ?>" class="btn secondary" style="padding:4px 8px;font-size:11px;background:#dc2626;cursor:pointer;" onclick="return confirm('Hapus file ini?');">🗑️ Hapus</button>
-                        </form>
+                        <button type="button" onclick="confirmDeleteAttachment(<?= (int)$a['id'] ?>, '<?= e($a['filename']) ?>')" class="btn secondary" style="padding:4px 8px;font-size:11px;background:#dc2626;cursor:pointer;">🗑️ Hapus</button>
                       </td>
                     </tr>
                   <?php endforeach; ?>

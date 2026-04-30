@@ -86,4 +86,97 @@ define('GROQ_API_KEY', (string)(getenv('GROQ_API_KEY') ?: ''));
 define('GROQ_API_URL', 'https://api.groq.com/openai/v1/chat/completions');
 define('GROQ_MODEL', 'llama3-8b-8192');
 
+// Microsoft Graph API Configuration
+define('GRAPH_TENANT_ID', (string)(getenv('GRAPH_TENANT_ID') ?: ''));
+define('GRAPH_CLIENT_ID', (string)(getenv('GRAPH_CLIENT_ID') ?: ''));
+define('GRAPH_CLIENT_SECRET', (string)(getenv('GRAPH_CLIENT_SECRET') ?: ''));
+define('GRAPH_REDIRECT_URI', (string)(getenv('GRAPH_REDIRECT_URI') ?: 'http://localhost'));
+
+// Email sending mode: 'outlook_com' (default), 'graph_api', or 'smtp'
+// Read from database first, fallback to environment variable, then default to 'outlook_com'
+function get_email_sending_mode() {
+    static $cachedMode = null;
+    
+    if ($cachedMode !== null) {
+        return $cachedMode;
+    }
+    
+    // Try to get from database
+    try {
+        require_once __DIR__ . '/lib/db.php';
+        $pdo = DB::conn();
+        $stmt = $pdo->prepare("SELECT value FROM system_settings WHERE `key` = 'email_sending_mode'");
+        $stmt->execute();
+        $result = $stmt->fetch();
+        
+        if ($result && !empty($result['value'])) {
+            $cachedMode = $result['value'];
+            return $cachedMode;
+        }
+    } catch (Exception $e) {
+        // Database not available yet (during installation), continue to fallback
+    }
+    
+    // Fallback to environment variable
+    $envMode = getenv('EMAIL_SENDING_MODE');
+    if ($envMode) {
+        $cachedMode = $envMode;
+        return $cachedMode;
+    }
+    
+    // Default to outlook_com
+    $cachedMode = 'outlook_com';
+    return $cachedMode;
+}
+
+define('EMAIL_SENDING_MODE', get_email_sending_mode());
+
+// SMTP Configuration (read from database)
+function get_smtp_config() {
+    static $cachedConfig = null;
+    
+    if ($cachedConfig !== null) {
+        return $cachedConfig;
+    }
+    
+    try {
+        require_once __DIR__ . '/lib/db.php';
+        $pdo = DB::conn();
+        
+        $config = [];
+        $keys = ['smtp_host', 'smtp_port', 'smtp_username', 'smtp_password', 'smtp_encryption', 'smtp_from_email', 'smtp_from_name'];
+        
+        foreach ($keys as $key) {
+            $stmt = $pdo->prepare("SELECT value FROM system_settings WHERE `key` = ?");
+            $stmt->execute([$key]);
+            $result = $stmt->fetch();
+            $config[$key] = $result['value'] ?? null;
+        }
+        
+        $cachedConfig = $config;
+        return $cachedConfig;
+    } catch (Exception $e) {
+        // Database not available
+        return [
+            'smtp_host' => null,
+            'smtp_port' => null,
+            'smtp_username' => null,
+            'smtp_password' => null,
+            'smtp_encryption' => null,
+            'smtp_from_email' => null,
+            'smtp_from_name' => null
+        ];
+    }
+}
+
+// Define SMTP constants from database config
+$smtpConfig = get_smtp_config();
+define('SMTP_HOST', $smtpConfig['smtp_host'] ?: '');
+define('SMTP_PORT', $smtpConfig['smtp_port'] ?: '587');
+define('SMTP_USERNAME', $smtpConfig['smtp_username'] ?: '');
+define('SMTP_PASSWORD', $smtpConfig['smtp_password'] ?: '');
+define('SMTP_ENCRYPTION', $smtpConfig['smtp_encryption'] ?: 'tls');
+define('SMTP_FROM_EMAIL', $smtpConfig['smtp_from_email'] ?: '');
+define('SMTP_FROM_NAME', $smtpConfig['smtp_from_name'] ?: '');
+
 ?>

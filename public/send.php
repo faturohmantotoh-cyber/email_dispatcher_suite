@@ -216,68 +216,181 @@ if (!empty($preparedItems)) {
 }
 $pdo->commit();
 
-// Build job JSON
-$jobJson = [
-    'subject' => $subject,
-    'cc' => $cc,
-    'body' => $body,
-    'items' => $preparedItems,
-];
-$jobPath = TEMP_DIR . DIRECTORY_SEPARATOR . 'job_' . $jobId . '.json';
-file_put_contents($jobPath, json_encode($jobJson, JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE));
-
-// Build map: PowerShell item ID -> related mail_job_item IDs
-$relatedIdsMap = [];
-foreach ($preparedItems as $item) {
-    if (!empty($item['related_ids']) && is_array($item['related_ids'])) {
-        $relatedIdsMap[$item['id']] = $item['related_ids'];
+// Check email sending mode
+if (EMAIL_SENDING_MODE === 'graph_api') {
+    // --- GRAPH API MODE: Send emails via Microsoft Graph API
+    $results = [];
+    $successCount = 0;
+    $failCount = 0;
+    
+    foreach ($preparedItems as $item) {
+        $itemId = $item['id'];
+        $toEmail = $item['to'];
+        $attachments = [];
+        
+        // Parse attachments (support single or multiple)
+        if ($item['attachment']) {
+            if (is_array($item['attachment'])) {
+                $attachments = $item['attachment'];
+            } else {
+                $attachments = [$item['attachment']];
+            }
+        }
+        
+        // Send email via Graph API
+        $result = send_email_via_graph($toEmail, $subject, $body, $attachments, $cc);
+        
+        if ($result['success']) {
+            $successCount++;
+            // Update database status
+            $stmt = $pdo->prepare("UPDATE mail_job_items SET status = 'sent', sent_at = NOW() WHERE id = ?");
+            $stmt->execute([$itemId]);
+            
+            // Update related items
+            if (!empty($relatedIdsMap[$itemId])) {
+                foreach ($relatedIdsMap[$itemId] as $relatedId) {
+                    $stmt = $pdo->prepare("UPDATE mail_job_items SET status = 'sent', sent_at = NOW() WHERE id = ?");
+                    $stmt->execute([$relatedId]);
+                }
+            }
+        } else {
+            $failCount++;
+            $stmt = $pdo->prepare("UPDATE mail_job_items SET status = 'failed', error_message = ? WHERE id = ?");
+            $stmt->execute([$result['message'], $itemId]);
+        }
+        
+        $results[] = [
+            'id' => $itemId,
+            'status' => $result['success'] ? 'sent' : 'failed',
+            'message' => $result['message']
+        ];
+        
+        // Small delay between sends to avoid rate limiting
+        if (count($preparedItems) > 1) {
+            usleep(500000); // 0.5 second delay
+        }
     }
-}
-
-$ps = __DIR__ . '/../ps/send_outlook_emails.ps1';
-$account = get_sender_account();
-$resultPath = TEMP_DIR . DIRECTORY_SEPARATOR . 'result_job_' . $jobId . '.json';
-$cmd = 'powershell -ExecutionPolicy Bypass -File ' . escapeshellarg($ps) . ' -JobJsonPath ' . escapeshellarg($jobPath) . ' -Account ' . escapeshellarg($account) . ' -ResultJsonPath ' . escapeshellarg($resultPath);
-
-// --- OPTIMIZATION: Run PowerShell in background (non-blocking)
-// This allows PHP to return immediately instead of waiting for all emails to send
-$descriptor_spec = array(
-   0 => array("pipe", "r"),  // stdin
-   1 => array("pipe", "w"),  // stdout
-   2 => array("pipe", "w")   // stderr
-);
-$process = proc_open(
-    $cmd . ' 2>&1',
-    $descriptor_spec,
-    $pipes,
-    null,
-    null
-);
-
-$output = '';
-if (is_resource($process)) {
-    // Close stdin (not needed for PowerShell)
-    fclose($pipes[0]);
     
-    // Read initial output (first few lines) to check for immediate errors
-    stream_set_blocking($pipes[1], false);
-    $initialOutput = stream_get_contents($pipes[1]);
-    fclose($pipes[1]);
-    fclose($pipes[2]);
+    // Update job status
+    $jobStatus = ($failCount === 0) ? 'completed' : 'partial';
+    $stmt = $pdo->prepare("UPDATE mail_jobs SET status = ?, completed_at = NOW() WHERE id = ?");
+    $stmt->execute([$jobStatus, $jobId]);
     
-    // Don't wait for process to finish - let it run in background
-    // The process will write results to $resultPath JSON file
-    $output = $initialOutput;
+    $output = "Graph API Mode:\n";
+    $output .= "Success: $successCount\n";
+    $output .= "Failed: $failCount\n";
+    $output .= "Total: " . count($preparedItems) . "\n";
     
-    proc_close($process);
+} elseif (EMAIL_SENDING_MODE === 'smtp') {
+    // --- SMTP MODE: Send emails via SMTP
+    $results = [];
+    $successCount = 0;
+    $failCount = 0;
+    
+    foreach ($preparedItems as $item) {
+        $itemId = $item['id'];
+        $toEmail = $item['to'];
+        $attachments = [];
+        
+        // Parse attachments (support single or multiple)
+        if ($item['attachment']) {
+            if (is_array($item['attachment'])) {
+                $attachments = $item['attachment'];
+            } else {
+                $attachments = [$item['attachment']];
+            }
+        }
+        
+        // Send email via SMTP
+        $result = send_email_via_smtp($toEmail, $subject, $body, $attachments, $cc);
+        
+        if ($result['success']) {
+            $successCount++;
+            // Update database status
+            $stmt = $pdo->prepare("UPDATE mail_job_items SET status = 'sent', sent_at = NOW() WHERE id = ?");
+            $stmt->execute([$itemId]);
+            
+            // Update related items
+            if (!empty($relatedIdsMap[$itemId])) {
+                foreach ($relatedIdsMap[$itemId] as $relatedId) {
+                    $stmt = $pdo->prepare("UPDATE mail_job_items SET status = 'sent', sent_at = NOW() WHERE id = ?");
+                    $stmt->execute([$relatedId]);
+                }
+            }
+        } else {
+            $failCount++;
+            $stmt = $pdo->prepare("UPDATE mail_job_items SET status = 'failed', error_message = ? WHERE id = ?");
+            $stmt->execute([$result['message'], $itemId]);
+        }
+        
+        $results[] = [
+            'id' => $itemId,
+            'status' => $result['success'] ? 'sent' : 'failed',
+            'message' => $result['message']
+        ];
+        
+        // Small delay between sends to avoid rate limiting
+        if (count($preparedItems) > 1) {
+            usleep(500000); // 0.5 second delay
+        }
+    }
+    
+    // Update job status
+    $jobStatus = ($failCount === 0) ? 'completed' : 'partial';
+    $stmt = $pdo->prepare("UPDATE mail_jobs SET status = ?, completed_at = NOW() WHERE id = ?");
+    $stmt->execute([$jobStatus, $jobId]);
+    
+    $output = "SMTP Mode:\n";
+    $output .= "Success: $successCount\n";
+    $output .= "Failed: $failCount\n";
+    $output .= "Total: " . count($preparedItems) . "\n";
+    
 } else {
-    $output = "Error: Gagal menjalankan PowerShell process";
+    // --- OUTLOOK COM MODE: Use PowerShell (original behavior)
+    $ps = __DIR__ . '/../ps/send_outlook_emails.ps1';
+    $account = get_sender_account();
+    $resultPath = TEMP_DIR . DIRECTORY_SEPARATOR . 'result_job_' . $jobId . '.json';
+    $cmd = 'powershell -ExecutionPolicy Bypass -File ' . escapeshellarg($ps) . ' -JobJsonPath ' . escapeshellarg($jobPath) . ' -Account ' . escapeshellarg($account) . ' -ResultJsonPath ' . escapeshellarg($resultPath);
+
+    // --- OPTIMIZATION: Run PowerShell in background (non-blocking)
+    // This allows PHP to return immediately instead of waiting for all emails to send
+    $descriptor_spec = array(
+       0 => array("pipe", "r"),  // stdin
+       1 => array("pipe", "w"),  // stdout
+       2 => array("pipe", "w")   // stderr
+    );
+    $process = proc_open(
+        $cmd . ' 2>&1',
+        $descriptor_spec,
+        $pipes,
+        null,
+        null
+    );
+
+    $output = '';
+    if (is_resource($process)) {
+        // Close stdin (not needed for PowerShell)
+        fclose($pipes[0]);
+        
+        // Read initial output (first few lines) to check for immediate errors
+        stream_set_blocking($pipes[1], false);
+        $initialOutput = stream_get_contents($pipes[1]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        
+        // Don't wait for process to finish - let it run in background
+        // The process will write results to $resultPath JSON file
+        $output = $initialOutput;
+        
+        proc_close($process);
+    } else {
+        $output = "Error: Gagal menjalankan PowerShell process";
+    }
+
+    // --- NOTE: Results will be processed asynchronously
+    // Check logs.php to see real-time progress
+    // Do NOT wait for result file here to keep response fast
 }
-
-// --- NOTE: Results will be processed asynchronously
-// Check logs.php to see real-time progress
-// Do NOT wait for result file here to keep response fast
-
 ?>
 <!doctype html>
 <html lang="id">

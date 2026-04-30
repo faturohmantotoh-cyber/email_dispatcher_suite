@@ -260,6 +260,9 @@ if (isset($_POST['import'])) {
 
 // === Action: CLEAR ALL CONTACTS (sync history) ===
 if (isset($_POST['clear_contacts'])) {
+    // Require admin password verification
+    require_admin_password('admin_password', $pdo, 'contacts.php');
+    
     try {
         $pdo->exec("DELETE FROM `contacts`");
         $msg = "✓ <strong>Semua kontak history berhasil dihapus!</strong> Database contacts sekarang kosong.";
@@ -572,6 +575,9 @@ if (isset($_POST['delete_group'])) {
     if ($groupId <= 0) {
         $msg = '<div style="background:#FADDD1;border-left:4px solid #E74C3C;color:#7F4028;padding:12px;border-radius:4px;margin:8px 0;">✗ ID grup tidak valid.</div>';
     } else {
+        // Require admin password verification
+        require_admin_password('admin_password', $pdo, 'contacts.php');
+        
         try {
             $pdo->beginTransaction();
             
@@ -2135,18 +2141,51 @@ async function deleteGroup(groupId, groupName) {
   });
   
   if (result.isConfirmed) {
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = 'contacts.php';
+    // Prompt for admin password
+    const { value: password } = await Swal.fire({
+      title: 'Konfirmasi Password Administrator',
+      input: 'password',
+      inputLabel: 'Masukkan password Anda untuk melanjutkan:',
+      inputPlaceholder: 'Password',
+      inputAttributes: {
+        maxlength: 50,
+        autocapitalize: 'off',
+        autocorrect: 'off'
+      },
+      showCancelButton: true,
+      confirmButtonText: 'Konfirmasi',
+      confirmButtonColor: '#E74C3C',
+      cancelButtonText: 'Batal',
+      cancelButtonColor: '#6b7280',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      inputValidator: (value) => {
+        if (!value) {
+          return 'Password wajib diisi!'
+        }
+      }
+    });
     
-    const groupIdInput = document.createElement('input');
-    groupIdInput.type = 'hidden';
-    groupIdInput.name = 'delete_group';
-    groupIdInput.value = groupId;
-    
-    form.appendChild(groupIdInput);
-    document.body.appendChild(form);
-    form.submit();
+    if (password) {
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = 'contacts.php';
+      
+      const groupIdInput = document.createElement('input');
+      groupIdInput.type = 'hidden';
+      groupIdInput.name = 'delete_group';
+      groupIdInput.value = groupId;
+      
+      const passwordInput = document.createElement('input');
+      passwordInput.type = 'hidden';
+      passwordInput.name = 'admin_password';
+      passwordInput.value = password;
+      
+      form.appendChild(groupIdInput);
+      form.appendChild(passwordInput);
+      document.body.appendChild(form);
+      form.submit();
+    }
   }
 }
 
@@ -2505,18 +2544,51 @@ async function confirmClearContacts() {
   });
   
   if (result.isConfirmed) {
-    const form = document.createElement('form');
-    form.method = 'post';
-    form.action = 'contacts.php';
+    // Prompt for admin password
+    const { value: password } = await Swal.fire({
+      title: 'Konfirmasi Password Administrator',
+      input: 'password',
+      inputLabel: 'Masukkan password Anda untuk melanjutkan:',
+      inputPlaceholder: 'Password',
+      inputAttributes: {
+        maxlength: 50,
+        autocapitalize: 'off',
+        autocorrect: 'off'
+      },
+      showCancelButton: true,
+      confirmButtonText: 'Konfirmasi',
+      confirmButtonColor: '#dc2626',
+      cancelButtonText: 'Batal',
+      cancelButtonColor: '#6b7280',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      inputValidator: (value) => {
+        if (!value) {
+          return 'Password wajib diisi!'
+        }
+      }
+    });
     
-    const input = document.createElement('input');
-    input.type = 'hidden';
-    input.name = 'clear_contacts';
-    input.value = '1';
-    
-    form.appendChild(input);
-    document.body.appendChild(form);
-    form.submit();
+    if (password) {
+      const form = document.createElement('form');
+      form.method = 'post';
+      form.action = 'contacts.php';
+      
+      const inputClear = document.createElement('input');
+      inputClear.type = 'hidden';
+      inputClear.name = 'clear_contacts';
+      inputClear.value = '1';
+      
+      const inputPassword = document.createElement('input');
+      inputPassword.type = 'hidden';
+      inputPassword.name = 'admin_password';
+      inputPassword.value = password;
+      
+      form.appendChild(inputClear);
+      form.appendChild(inputPassword);
+      document.body.appendChild(form);
+      form.submit();
+    }
   }
 }
 
