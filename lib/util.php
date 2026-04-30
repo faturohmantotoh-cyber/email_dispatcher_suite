@@ -123,6 +123,65 @@ function escapeJSON($string) {
 }
 
 /**
+ * Get Microsoft Graph API access token using Client Credentials Flow
+ * @return string|false Access token or false on failure
+ */
+function get_graph_access_token() {
+    $tenantId = GRAPH_TENANT_ID;
+    $clientId = GRAPH_CLIENT_ID;
+    $clientSecret = GRAPH_CLIENT_SECRET;
+    
+    // Check if credentials are configured
+    if (empty($tenantId) || empty($clientId) || empty($clientSecret)) {
+        error_log('Graph API credentials not configured');
+        return false;
+    }
+    
+    $url = "https://login.microsoftonline.com/" . urlencode($tenantId) . "/oauth2/v2.0/token";
+    
+    $postData = [
+        'grant_type' => 'client_credentials',
+        'client_id' => $clientId,
+        'client_secret' => $clientSecret,
+        'scope' => 'https://graph.microsoft.com/.default'
+    ];
+    
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($postData));
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Content-Type: application/x-www-form-urlencoded'
+    ]);
+    
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+    
+    if ($error) {
+        error_log('Graph API token request failed: ' . $error);
+        return false;
+    }
+    
+    if ($httpCode !== 200) {
+        error_log('Graph API token request HTTP error: ' . $httpCode . ' Response: ' . $response);
+        return false;
+    }
+    
+    $data = json_decode($response, true);
+    
+    if (!isset($data['access_token'])) {
+        error_log('Graph API token response missing access_token: ' . $response);
+        return false;
+    }
+    
+    return $data['access_token'];
+}
+
+/**
  * Send email via Microsoft Graph API
  * @param string $to Recipient email address
  * @param string $subject Email subject
