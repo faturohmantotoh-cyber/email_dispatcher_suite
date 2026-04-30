@@ -463,7 +463,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $emailMode = $_POST['email_sending_mode'] ?? 'outlook_com';
         
         // Validate mode
-        if (!in_array($emailMode, ['outlook_com', 'graph_api', 'smtp'])) {
+        if (!in_array($emailMode, ['outlook_com', 'graph_api', 'smtp', 'client_engine'])) {
             $message = 'Mode pengiriman email tidak valid.';
             $messageType = 'error';
         } else {
@@ -488,7 +488,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 $modeNames = [
                     'outlook_com' => 'Outlook COM',
                     'graph_api' => 'Microsoft Graph API',
-                    'smtp' => 'SMTP Direct'
+                    'smtp' => 'SMTP Direct',
+                    'client_engine' => 'Client Engine (Local Outlook)'
                 ];
                 $message = '✅ Mode pengiriman email berhasil diubah ke ' . ($modeNames[$emailMode] ?? $emailMode);
                 $messageType = 'success';
@@ -499,6 +500,79 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             }
         }
     }
+}
+
+// Handle Client Engine token generation
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'generate_engine_token') {
+    if (!SecurityManager::verifyCSRFToken($_POST['csrf_token'] ?? '')) {
+        $message = 'Token keamanan tidak valid. Silakan coba lagi.';
+        $messageType = 'error';
+    } else {
+        try {
+            $tokenName = $_POST['token_name'] ?? 'Default';
+            $tokenDescription = $_POST['token_description'] ?? '';
+            $token = bin2hex(random_bytes(32)); // 64 character token
+            
+            $stmt = $pdo->prepare("
+                INSERT INTO user_api_tokens (user_id, token, token_name, description, created_at)
+                VALUES (?, ?, ?, ?, NOW())
+            ");
+            $stmt->execute([$currentUser['id'], $token, $tokenName, $tokenDescription]);
+            
+            SecurityManager::logSecurityEvent('engine_token_generated', $currentUser['id'], "Token generated: $tokenName");
+            
+            $message = '✅ Token berhasil dibuat. Copy dan simpan token ini dengan aman: <strong>' . e($token) . '</strong><br><small>Token hanya ditampilkan sekali!</small>';
+            $messageType = 'success';
+        } catch (Exception $e) {
+            $message = 'Gagal membuat token: ' . $e->getMessage();
+            $messageType = 'error';
+        }
+    }
+}
+
+// Handle Client Engine token revocation
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'revoke_engine_token') {
+    if (!SecurityManager::verifyCSRFToken($_POST['csrf_token'] ?? '')) {
+        $message = 'Token keamanan tidak valid. Silakan coba lagi.';
+        $messageType = 'error';
+    } else {
+        try {
+            $tokenId = intval($_POST['token_id'] ?? 0);
+            
+            // Verify token belongs to current user
+            $stmt = $pdo->prepare("SELECT id FROM user_api_tokens WHERE id = ? AND user_id = ?");
+            $stmt->execute([$tokenId, $currentUser['id']]);
+            
+            if ($stmt->fetch()) {
+                $stmt = $pdo->prepare("UPDATE user_api_tokens SET is_active = 0 WHERE id = ?");
+                $stmt->execute([$tokenId]);
+                
+                SecurityManager::logSecurityEvent('engine_token_revoked', $currentUser['id'], "Token ID: $tokenId revoked");
+                
+                $message = '✅ Token berhasil di-nonaktifkan.';
+                $messageType = 'success';
+            } else {
+                $message = 'Token tidak ditemukan atau bukan milik Anda.';
+                $messageType = 'error';
+            }
+        } catch (Exception $e) {
+            $message = 'Gagal menonaktifkan token: ' . $e->getMessage();
+            $messageType = 'error';
+        }
+    }
+}
+
+// Get user's API tokens
+$userTokens = [];
+if ($currentUser) {
+    $stmt = $pdo->prepare("
+        SELECT id, token_name, description, is_active, last_used_at, created_at, ip_address
+        FROM user_api_tokens
+        WHERE user_id = ?
+        ORDER BY created_at DESC
+    ");
+    $stmt->execute([$currentUser['id']]);
+    $userTokens = $stmt->fetchAll();
 }
 
 // Handle SMTP configuration (admin only)
@@ -1052,6 +1126,14 @@ main.transitioning { animation: fadeOut 0.3s ease-out forwards; }
             .email-mode-card.smtp .email-mode-icon {
               background: linear-gradient(135deg, #dcfce7 0%, #86efac 100%);
             }
+            .email-mode-card.client-engine .email-mode-icon {
+              background: linear-gradient(135deg, #f3e8ff 0%, #c4b5fd 100%);
+            }
+            .email-mode-card.client-engine.selected {
+              border-color: #8b5cf6;
+              background: linear-gradient(135deg, #f3e8ff 0%, #ede9fe 100%);
+              box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);
+            }
             .email-mode-radio {
               position: absolute;
               top: 20px;
@@ -1171,6 +1253,30 @@ main.transitioning { animation: fadeOut 0.3s ease-out forwards; }
                 </div>
               </div>
             </label>
+            
+            <!-- Client Engine Card -->
+            <label class="email-mode-card client-engine <?= $currentEmailMode === 'client_engine' ? 'selected' : '' ?>">
+              <input type="radio" name="email_sending_mode" value="client_engine" <?= $currentEmailMode === 'client_engine' ? 'checked' : '' ?> class="email-mode-radio">
+              <div class="email-mode-icon">💻</div>
+              <div>
+                <div class="email-mode-title">Client Engine (Local Outlook)</div>
+                <div class="email-mode-desc">Kirim email dari Outlook lokal komputer user menggunakan aplikasi Python. Ideal untuk distributed teams.</div>
+                <div class="email-mode-features">
+                  <div class="email-mode-feature pros">
+                    <span>✓</span> Setiap user kirim dari Outlook lokal mereka
+                  </div>
+                  <div class="email-mode-feature pros">
+                    <span>✓</span> Sent items di masing-masing komputer user
+                  </div>
+                  <div class="email-mode-feature pros">
+                    <span>✓</span> Tidak perlu Outlook di server
+                  </div>
+                  <div class="email-mode-feature cons">
+                    <span>⚠</span> Perlu install aplikasi Python di setiap client
+                  </div>
+                </div>
+              </div>
+            </label>
           </div>
           
           <div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:12px;border-radius:8px;margin:20px 0;">
@@ -1219,6 +1325,39 @@ main.transitioning { animation: fadeOut 0.3s ease-out forwards; }
             </div>
             <div style="margin-top:12px;padding-top:12px;border-top:1px solid #86efac;">
               <small style="color:#065f46;">📖 Konfigurasi SMTP di bawah (SMTP Configuration Form).</small>
+            </div>
+          </div>
+          <?php endif; ?>
+          
+          <?php if ($currentEmailMode === 'client_engine'): ?>
+          <div style="background:#f3e8ff;border:1px solid #8b5cf6;border-radius:8px;padding:16px;margin:20px 0;">
+            <div style="font-weight:600;color:#5b21b6;margin-bottom:12px;">ℹ️ Status Client Engine</div>
+            <div style="display:grid;gap:8px;">
+              <?php
+              $activeTokensCount = count(array_filter($userTokens, fn($t) => $t['is_active']));
+              $pendingEmailsCount = 0;
+              try {
+                  $stmt = $pdo->prepare("SELECT COUNT(*) FROM email_queue WHERE user_id = ? AND status = 'pending'");
+                  $stmt->execute([$currentUser['id']]);
+                  $pendingEmailsCount = $stmt->fetchColumn();
+              } catch (Exception $e) {
+                  // Table might not exist yet
+              }
+              ?>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span>Token Aktif:</span>
+                <?= $activeTokensCount > 0 
+                    ? '<span style="background:#dcfce7;color:#059669;padding:4px 8px;border-radius:4px;font-size:12px;font-weight:500;">✓ ' . $activeTokensCount . ' token aktif</span>' 
+                    : '<span style="background:#fee2e2;color:#dc2626;padding:4px 8px;border-radius:4px;font-size:12px;font-weight:500;">⚠️ Tidak ada token aktif</span>' 
+                ?>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span>Email Menunggu:</span>
+                <span style="background:#dbeafe;color:#1e40af;padding:4px 8px;border-radius:4px;font-size:12px;font-weight:500;"><?= $pendingEmailsCount ?> email</span>
+              </div>
+            </div>
+            <div style="margin-top:12px;padding-top:12px;border-top:1px solid #c4b5fd;">
+              <small style="color:#5b21b6;">📖 Setup Client Engine di bawah (Token Management & Download).</small>
             </div>
           </div>
           <?php endif; ?>
@@ -1289,6 +1428,177 @@ main.transitioning { animation: fadeOut 0.3s ease-out forwards; }
               Simpan Konfigurasi SMTP
             </button>
           </form>
+        </div>
+        
+        <!-- Client Engine Section -->
+        <div style="margin-top:40px;background:#f3e8ff;border:1px solid #8b5cf6;border-radius:12px;padding:24px;">
+          <h5 style="margin-top:0;margin-bottom:16px;">💻 Client Engine (Local Outlook)</h5>
+          <p style="color:#666;font-size:14px;margin-bottom:20px;">
+            Client Engine memungkinkan pengiriman email dari Outlook lokal di komputer Anda. 
+            Download aplikasi Python dan generate token untuk menghubungkan ke server.
+          </p>
+          
+          <!-- Token Management -->
+          <div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:16px;margin-bottom:20px;">
+            <h6 style="margin-top:0;margin-bottom:12px;">🔑 Token Management</h6>
+            
+            <?php if (!empty($userTokens)): ?>
+            <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:13px;">
+              <thead>
+                <tr style="border-bottom:2px solid #e5e7eb;">
+                  <th style="text-align:left;padding:8px;">Nama</th>
+                  <th style="text-align:left;padding:8px;">Deskripsi</th>
+                  <th style="text-align:center;padding:8px;">Status</th>
+                  <th style="text-align:left;padding:8px;">Terakhir Digunakan</th>
+                  <th style="text-align:center;padding:8px;">Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                <?php foreach ($userTokens as $token): ?>
+                <tr style="border-bottom:1px solid #e5e7eb;">
+                  <td style="padding:8px;"><?= e($token['token_name']) ?></td>
+                  <td style="padding:8px;"><?= e($token['description'] ?? '-') ?></td>
+                  <td style="padding:8px;text-align:center;">
+                    <?php if ($token['is_active']): ?>
+                      <span style="background:#dcfce7;color:#059669;padding:2px 8px;border-radius:4px;font-size:12px;">Aktif</span>
+                    <?php else: ?>
+                      <span style="background:#fee2e2;color:#dc2626;padding:2px 8px;border-radius:4px;font-size:12px;">Nonaktif</span>
+                    <?php endif; ?>
+                  </td>
+                  <td style="padding:8px;">
+                    <?= $token['last_used_at'] ? date('d/m/Y H:i', strtotime($token['last_used_at'])) : 'Belum pernah' ?>
+                  </td>
+                  <td style="padding:8px;text-align:center;">
+                    <?php if ($token['is_active']): ?>
+                    <form method="post" action="?tab=email" style="display:inline;">
+                      <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
+                      <input type="hidden" name="action" value="revoke_engine_token">
+                      <input type="hidden" name="token_id" value="<?= $token['id'] ?>">
+                      <button type="submit" class="btn" style="background:#dc2626;padding:4px 12px;font-size:12px;" onclick="return confirm('Yakin ingin menonaktifkan token ini?')">
+                        Nonaktifkan
+                      </button>
+                    </form>
+                    <?php endif; ?>
+                  </td>
+                </tr>
+                <?php endforeach; ?>
+              </tbody>
+            </table>
+            <?php else: ?>
+            <p style="color:#666;font-size:13px;margin-bottom:16px;">
+              Belum ada token. Generate token baru untuk menggunakan Client Engine.
+            </p>
+            <?php endif; ?>
+            
+            <!-- Generate New Token Form -->
+            <form method="post" action="?tab=email">
+              <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
+              <input type="hidden" name="action" value="generate_engine_token">
+              
+              <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;">
+                <div>
+                  <label style="display:block;font-weight:600;margin-bottom:6px;font-size:14px;">Nama Token</label>
+                  <input type="text" name="token_name" placeholder="Contoh: Laptop Kantor" required style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;box-sizing:border-box;">
+                </div>
+                <div>
+                  <label style="display:block;font-weight:600;margin-bottom:6px;font-size:14px;">Deskripsi (Opsional)</label>
+                  <input type="text" name="token_description" placeholder="Contoh: Komputer di kantor utama" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;box-sizing:border-box;">
+                </div>
+                <div>
+                  <button type="submit" class="btn" style="background:#8b5cf6;padding:10px 20px;border-radius:6px;font-weight:600;font-size:14px;">
+                    + Generate Token
+                  </button>
+                </div>
+              </div>
+            </form>
+            
+            <?php if (strpos($message, 'Token berhasil dibuat') !== false): ?>
+            <div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:12px;border-radius:4px;margin-top:16px;">
+              <strong>⚠️ Penting:</strong> Copy token di atas dan simpan dengan aman. Token hanya ditampilkan sekali!
+            </div>
+            <?php endif; ?>
+          </div>
+          
+          <!-- Download Section -->
+          <div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:16px;">
+            <h6 style="margin-top:0;margin-bottom:12px;">⬇️ Download Client Engine</h6>
+            
+            <div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:12px;border-radius:4px;margin-bottom:16px;">
+              <strong>💡 Rekomendasi:</strong> Gunakan <strong>.exe version</strong> jika komputer Anda tidak memiliki Python terinstall.
+            </div>
+            
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(250px, 1fr));gap:16px;">
+              <!-- .exe Download (Recommended) -->
+              <div style="background:linear-gradient(135deg, #dcfce7 0%, #ecfdf5 100%);border:2px solid #22c55e;border-radius:6px;padding:12px;position:relative;">
+                <div style="position:absolute;top:-10px;left:12px;background:#22c55e;color:#fff;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:600;">⭐ REKOMENDASI</div>
+                <div style="font-weight:600;margin-bottom:8px;margin-top:10px;">⚙️ Windows Executable (.exe)</div>
+                <p style="font-size:13px;color:#666;margin-bottom:12px;">
+                  <strong>Tidak perlu Python!</strong> File executable standalone untuk Windows. Tinggal download, buat config, jalankan.
+                </p>
+                <?php 
+                $exeExists = file_exists(__DIR__ . '/../client_engine/dist/EmailSenderEngine.exe');
+                if ($exeExists): 
+                ?>
+                <a href="../client_engine/dist/EmailSenderEngine.exe" download class="btn" style="background:#22c55e;padding:8px 16px;font-size:13px;display:inline-block;text-decoration:none;color:#fff;">
+                  ⬇️ Download EmailSenderEngine.exe
+                </a>
+                <?php else: ?>
+                <div style="background:#fee2e2;border:1px solid #ef4444;border-radius:4px;padding:8px;font-size:12px;color:#dc2626;">
+                  ⚠️ File .exe belum tersedia. Hubungi administrator untuk build.
+                </div>
+                <?php endif; ?>
+              </div>
+              
+              <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:12px;">
+                <div style="font-weight:600;margin-bottom:8px;">📄 Python Script</div>
+                <p style="font-size:13px;color:#666;margin-bottom:12px;">File utama aplikasi Python. Perlu install Python 3.7+ dan dependencies.</p>
+                <a href="../client_engine/email_sender_engine.py" download class="btn" style="background:#3b82f6;padding:8px 16px;font-size:13px;display:inline-block;text-decoration:none;color:#fff;">
+                  Download .py
+                </a>
+              </div>
+              
+              <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:12px;">
+                <div style="font-weight:600;margin-bottom:8px;">🚀 Windows Launcher</div>
+                <p style="font-size:13px;color:#666;margin-bottom:12px;">Batch file untuk menjalankan engine dengan mudah (untuk Python version).</p>
+                <a href="../client_engine/run_engine.bat" download class="btn" style="background:#3b82f6;padding:8px 16px;font-size:13px;display:inline-block;text-decoration:none;color:#fff;">
+                  Download .bat
+                </a>
+              </div>
+              
+              <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:12px;">
+                <div style="font-weight:600;margin-bottom:8px;">📖 Dokumentasi</div>
+                <p style="font-size:13px;color:#666;margin-bottom:12px;">Panduan lengkap instalasi dan penggunaan Client Engine.</p>
+                <a href="../client_engine/README.md" target="_blank" class="btn" style="background:#6b7280;padding:8px 16px;font-size:13px;display:inline-block;text-decoration:none;color:#fff;">
+                  Baca README
+                </a>
+              </div>
+            </div>
+            
+            <div style="margin-top:16px;padding:12px;background:#eff6ff;border-left:4px solid #3b82f6;border-radius:4px;">
+              <strong>Quick Start (.exe Version - Rekomendasi):</strong>
+              <ol style="margin:8px 0;padding-left:20px;font-size:13px;color:#374151;">
+                <li>Download <strong>EmailSenderEngine.exe</strong> di atas</li>
+                <li>Buat file <code>.env</code> di folder yang sama dengan isi:
+                  <pre style="background:#f3f4f6;padding:8px;border-radius:4px;margin-top:4px;font-size:12px;">EMAIL_ENGINE_SERVER=<?= e((!empty($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost')) ?>
+EMAIL_ENGINE_TOKEN=your-token-here
+EMAIL_ENGINE_DELAY=1000</pre>
+                </li>
+                <li>Double-click <code>EmailSenderEngine.exe</code> atau jalankan dari Command Prompt:
+                  <code>EmailSenderEngine.exe --config .env --daemon</code>
+                </li>
+              </ol>
+            </div>
+            
+            <div style="margin-top:12px;padding:12px;background:#f9fafb;border-left:4px solid #6b7280;border-radius:4px;">
+              <strong>Quick Start (Python Version):</strong>
+              <ol style="margin:8px 0;padding-left:20px;font-size:13px;color:#374151;">
+                <li>Download <code>email_sender_engine.py</code> dan <code>run_engine.bat</code></li>
+                <li>Install Python dan dependencies: <code>pip install requests pywin32</code></li>
+                <li>Generate token di atas</li>
+                <li>Jalankan: <code>python email_sender_engine.py --config .env --daemon</code></li>
+              </ol>
+            </div>
+          </div>
         </div>
         
         <div style="margin-top:24px;">
