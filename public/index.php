@@ -18,6 +18,63 @@ try {
 } catch (Exception $e) {
   $contacts_count = $groups_count = $attachments_count = $users_count = 0;
 }
+
+// Track active user session for real-time monitoring
+$current_user_id = $user['id'] ?? 0;
+$current_ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+$current_hostname = gethostbyaddr($current_ip) ?: 'unknown';
+$current_user_agent = $_SERVER['HTTP_USER_AGENT'] ?? 'unknown';
+$session_id = session_id();
+
+// Update or insert active session
+try {
+  // Clean up old sessions (older than 5 minutes)
+  $pdo->query("DELETE FROM user_sessions WHERE last_activity < DATE_SUB(NOW(), INTERVAL 5 MINUTE)");
+  
+  // Check if table exists, if not create it
+  $pdo->query("
+    CREATE TABLE IF NOT EXISTS user_sessions (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      session_id VARCHAR(255) NOT NULL,
+      ip_address VARCHAR(45) NOT NULL,
+      hostname VARCHAR(255) DEFAULT NULL,
+      user_agent TEXT,
+      login_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_activity DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY unique_session (session_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  ");
+  
+  // Insert or update current session
+  $stmt = $pdo->prepare("
+    INSERT INTO user_sessions (user_id, session_id, ip_address, hostname, user_agent, login_time, last_activity)
+    VALUES (?, ?, ?, ?, ?, NOW(), NOW())
+    ON DUPLICATE KEY UPDATE
+      ip_address = VALUES(ip_address),
+      hostname = VALUES(hostname),
+      user_agent = VALUES(user_agent),
+      last_activity = NOW()
+  ");
+  $stmt->execute([$current_user_id, $session_id, $current_ip, $current_hostname, $current_user_agent]);
+  
+  // Get active users with details
+  $active_users_stmt = $pdo->query("
+    SELECT s.user_id, u.username, u.display_name, u.role,
+           s.ip_address, s.hostname, s.last_activity,
+           TIMESTAMPDIFF(SECOND, s.last_activity, NOW()) as idle_seconds
+    FROM user_sessions s
+    JOIN users u ON s.user_id = u.id
+    WHERE s.last_activity > DATE_SUB(NOW(), INTERVAL 5 MINUTE)
+    ORDER BY s.last_activity DESC
+  ");
+  $active_users = $active_users_stmt->fetchAll(PDO::FETCH_ASSOC);
+  $active_users_count = count($active_users);
+  
+} catch (Exception $e) {
+  $active_users = [];
+  $active_users_count = 0;
+}
 ?>
 <!doctype html>
 <html lang="id">
@@ -938,6 +995,103 @@ try {
         </div>
       </div>
 
+      <!-- Active Users Monitor Card -->
+      <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-radius: 1rem; padding: 1.5rem; margin-bottom: 2rem; border: 1px solid #334155; color: white;">
+        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+          <div style="width: 3rem; height: 3rem; background: linear-gradient(135deg, #10b981, #059669); border-radius: 0.75rem; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">
+            👥
+          </div>
+          <div>
+            <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700; color: white;">User Aktif Real-time</h3>
+            <p style="margin: 0.25rem 0 0 0; font-size: 0.85rem; color: #94a3b8;"><?= $active_users_count ?> user online • Auto-refresh 30s</p>
+          </div>
+          <div style="margin-left: auto; padding: 0.5rem 1rem; background: rgba(16, 185, 129, 0.2); border: 1px solid #10b981; border-radius: 2rem; font-size: 0.8rem; font-weight: 600; color: #10b981; display: flex; align-items: center; gap: 0.5rem;">
+            <span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; animation: pulse 2s infinite;"></span>
+            LIVE
+          </div>
+        </div>
+        
+        <?php if (count($active_users) > 0): ?>
+        <div style="background: rgba(30, 41, 59, 0.5); border-radius: 0.75rem; overflow: hidden; max-height: 300px; overflow-y: auto;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+            <thead>
+              <tr style="background: rgba(51, 65, 85, 0.8);">
+                <th style="padding: 0.75rem 1rem; text-align: left; color: #94a3b8; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px;">User</th>
+                <th style="padding: 0.75rem 1rem; text-align: left; color: #94a3b8; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px;">Role</th>
+                <th style="padding: 0.75rem 1rem; text-align: left; color: #94a3b8; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px;">IP Address</th>
+                <th style="padding: 0.75rem 1rem; text-align: left; color: #94a3b8; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px;">Hostname</th>
+                <th style="padding: 0.75rem 1rem; text-align: left; color: #94a3b8; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px;">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php foreach ($active_users as $active_user): ?>
+              <tr style="border-bottom: 1px solid rgba(51, 65, 85, 0.5);">
+                <td style="padding: 0.75rem 1rem; color: white; font-weight: 500;">
+                  <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <div style="width: 2rem; height: 2rem; background: linear-gradient(135deg, #3b82f6, #2563eb); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: 600;">
+                      <?= strtoupper(substr($active_user['display_name'] ?? $active_user['username'], 0, 1)) ?>
+                    </div>
+                    <div>
+                      <div style="font-weight: 600; color: white;"><?= e($active_user['display_name'] ?? $active_user['username']) ?></div>
+                      <div style="font-size: 0.75rem; color: #94a3b8;">@<?= e($active_user['username']) ?></div>
+                    </div>
+                  </div>
+                </td>
+                <td style="padding: 0.75rem 1rem;">
+                  <span style="padding: 0.25rem 0.75rem; border-radius: 1rem; font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
+                    <?= $active_user['role'] === 'admin' ? 'background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3);' : 'background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3);' ?>">
+                    <?= $active_user['role'] === 'admin' ? '🔴 Admin' : '🔵 User' ?>
+                  </span>
+                </td>
+                <td style="padding: 0.75rem 1rem; color: #cbd5e1; font-family: monospace; font-size: 0.8rem;">
+                  <?= e($active_user['ip_address']) ?>
+                </td>
+                <td style="padding: 0.75rem 1rem; color: #cbd5e1; font-size: 0.8rem; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="<?= e($active_user['hostname']) ?>">
+                  <?= e($active_user['hostname']) ?>
+                </td>
+                <td style="padding: 0.75rem 1rem;">
+                  <?php $idle_seconds = $active_user['idle_seconds'] ?? 0; ?>
+                  <?php if ($idle_seconds < 60): ?>
+                    <span style="display: flex; align-items: center; gap: 0.5rem; color: #10b981; font-size: 0.8rem; font-weight: 600;">
+                      <span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%;"></span>
+                      Online
+                    </span>
+                  <?php else: ?>
+                    <span style="display: flex; align-items: center; gap: 0.5rem; color: #f59e0b; font-size: 0.8rem; font-weight: 600;">
+                      <span style="width: 8px; height: 8px; background: #f59e0b; border-radius: 50%;"></span>
+                      Idle (<?= floor($idle_seconds / 60) ?>m)
+                    </span>
+                  <?php endif; ?>
+                </td>
+              </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+        <?php else: ?>
+        <div style="text-align: center; padding: 2rem; color: #64748b;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">👤</div>
+          <p style="margin: 0; font-size: 0.95rem;">Tidak ada user aktif saat ini</p>
+        </div>
+        <?php endif; ?>
+        
+        <div style="margin-top: 1rem; display: flex; justify-content: space-between; align-items: center; padding-top: 1rem; border-top: 1px solid rgba(51, 65, 85, 0.5);">
+          <div style="font-size: 0.8rem; color: #64748b;">
+            <span style="color: #10b981;">●</span> Online <span style="color: #f59e0b;">●</span> Idle
+          </div>
+          <div style="font-size: 0.8rem; color: #64748b;">
+            Your IP: <span style="color: #94a3b8; font-family: monospace;"><?= e($current_ip) ?></span>
+          </div>
+        </div>
+      </div>
+      
+      <style>
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+      </style>
+
       <!-- Documentation & Help Section - Modern Redesign -->
       <div class="info-section docs-section" style="background: linear-gradient(145deg, #f8fafc 0%, #e2e8f0 100%); border: none; border-radius: 1rem; padding: 2rem; margin-bottom: 2rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
         <!-- Header with Search -->
@@ -1039,9 +1193,8 @@ try {
               <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.875rem;">
                 <div style="width: 3rem; height: 3rem; background: linear-gradient(135deg, #dbeafe, #bfdbfe); border-radius: 0.875rem; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">✉️</div>
                 <div>
-                  <h4 style="margin: 0; color: var(--color-primary-700); font-size: 1.05rem; font-weight: 700;">Modul 2: Compose & Send</h4>
-                  <span style="font-size: 0.8rem; color: var(--muted);">Compose • Template • Tracking</span>
-                </div>
+                  <h2 style="margin: 0 0 0.5rem 0; color: var(--text); font-size: 1.5rem; font-weight: 700;">Dashboard</h2>
+                  <p style="margin: 0 0 2rem 0; color: var(--muted); font-size: 0.95rem;">Selamat datang, <strong><?= e($user['display_name'] ?? $user['username']) ?></strong>! Kelola email blast Anda dengan mudah.</p>
               </div>
               <p style="margin: 0 0 1rem 0; font-size: 0.9rem; color: var(--muted); line-height: 1.5;">
                 Rich text editor, pilih penerima, upload lampiran, AI similarity matching, dan tracking pengiriman.

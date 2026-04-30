@@ -390,6 +390,7 @@ if (isset($_GET['ajax'])) {
 }
 
 // ===== Normal page load =====
+$csrf = get_csrf_token();
 $attachments = $pdo->query("SELECT * FROM attachments ORDER BY uploaded_at DESC")->fetchAll(PDO::FETCH_ASSOC);
 $totalContacts = (int)$pdo->query("SELECT COUNT(*) FROM contacts")->fetchColumn();
 
@@ -1840,6 +1841,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <main>
   <!-- Separate upload form that only handles files -->
   <form method="post" action="compose.php" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
   <div class="card card-collapsible collapsed" id="cardUpload">
     <h3 class="slider-toggle" onclick="toggleCardSlider('cardUpload')">
       <span>1) Upload Lampiran (Opsional)</span>
@@ -1886,6 +1888,7 @@ document.addEventListener('DOMContentLoaded', () => {
                       <td><?= e($a['uploaded_at']) ?></td>
                       <td style="text-align:center;">
                         <form method="post" action="compose.php" style="display:inline;">
+                          <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
                           <button type="submit" name="delete_attachment" value="<?= (int)$a['id'] ?>" class="btn secondary" style="padding:4px 8px;font-size:11px;background:#dc2626;cursor:pointer;" onclick="return confirm('Hapus file ini?');">🗑️ Hapus</button>
                         </form>
                       </td>
@@ -1908,6 +1911,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   <!-- Main email compose form -->
   <form method="post" action="match_preview.php" id="composeForm">
+    <!-- CSRF token -->
+    <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
     <!-- Hidden recipients sinkron setiap perubahan -->
     <div id="hiddenRecipients"></div>
     <!-- Hidden attachment count from database -->

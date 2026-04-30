@@ -5,6 +5,8 @@ require_once __DIR__ . '/../lib/util.php';
 ensure_dirs();
 $pdo = DB::conn();
 
+$csrf = get_csrf_token();
+
 $subject = $_POST['subject'] ?? '';
 $cc = $_POST['cc'] ?? '';
 $body = $_POST['body'] ?? '';
@@ -477,6 +479,7 @@ main{padding:20px;max-width:1100px;margin:0 auto}
 <main>
   <div class="card"><h3>Rencana Pengiriman</h3><div class="body">
     <form method="post" action="send.php">
+      <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
       <input type="hidden" name="subject" value="<?= e($subject) ?>">
       <input type="hidden" name="cc" value="<?= e($cc) ?>">
       <textarea name="body" style="display:none"><?= e($body) ?></textarea>
